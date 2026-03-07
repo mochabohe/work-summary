@@ -32,7 +32,11 @@
       "Bash(more:*)",
       "Bash(pnpm add:*)",
       "Bash(git add:*)",
-      "Bash(pnpm --filter @work-summary/client build:*)"
+      "Bash(pnpm --filter @work-summary/client build:*)",
+      "Bash(find:*)",
+      "Read(//c/Users/25198/Desktop/**)",
+      "Bash(npm run build:*)",
+      "Bash(Select-String -Pattern \"prompt-builder|generate.routes\")"
     ]
   }
 }

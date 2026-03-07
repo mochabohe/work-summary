@@ -2,6 +2,72 @@ import type { GenerateRequest, ProjectAnalysis } from '@work-summary/shared'
 import type { ChatMessage } from './index.js'
 
 export class PromptBuilder {
+  /** 构建全年概览指标提取提示词（分段生成 - 第一步） */
+  buildOverviewMetricsPrompt(fullContent: string): ChatMessage[] {
+    return [
+      {
+        role: 'system',
+        content: `你是一位数据提取专家。从年终工作总结中提取 3-4 个最关键的量化成果指标，生成一个 metrics 类型幻灯片。
+只输出紧凑的纯 JSON 对象（不要换行缩进，不要代码块标记，不要任何额外文字）。
+格式：{"type":"metrics","title":"工作亮点","metrics":[{"value":"数值","label":"指标名","description":"简短说明"}],"bullets":["**补充**：要点"]}
+要求：metrics 数组 3-4 项，bullets 2-3 条。value 使用简短有力的数字或短语（如 "15+"、"3个月"、"零故障"）。`,
+      },
+      {
+        role: 'user',
+        content: fullContent,
+      },
+    ]
+  }
+
+  /** 构建单个章节的幻灯片提示词（分段生成 - 逐章节） */
+  buildSectionSlidesPrompt(sectionTitle: string, sectionContent: string): ChatMessage[] {
+    return [
+      {
+        role: 'system',
+        content: `你是一位演示文稿设计师。将给定的工作总结章节转换为幻灯片，输出紧凑的 JSON 数组。
+
+## 规则
+1. 只输出纯 JSON 数组（不要换行缩进，不要代码块标记，不要任何额外文字）
+2. 该章节的每一条要点都必须出现，不能遗漏任何一条
+3. 如果要点超过 5 条，使用多个幻灯片展示
+4. 根据内容特点选择合适的类型，尽量混合使用不同类型
+
+## 可用类型（3 种）
+- content: {"type":"content","title":"标题","bullets":["**小标题**：描述"]}
+- two-column: {"type":"two-column","title":"标题","left":{"title":"左栏","bullets":["**要点**：描述"]},"right":{"title":"右栏","bullets":["**要点**：描述"]}}
+- grid: {"type":"grid","title":"标题","cards":[{"title":"卡片标题","bullets":["简短描述"]}]}
+
+## 格式要求
+- content / two-column 的 bullets 使用 "**加粗小标题**：描述" 格式
+- grid 卡片的 bullets 简短（10-20字），不用加粗
+- content 每页 4-6 条 bullets
+- two-column 每栏 3-4 条
+- grid 2-4 张卡片，每张 2-3 条`,
+      },
+      {
+        role: 'user',
+        content: `## ${sectionTitle}\n\n${sectionContent}`,
+      },
+    ]
+  }
+
+  /** 构建总结页提示词（分段生成 - 最后一步） */
+  buildSummarySlidePrompt(fullContent: string): ChatMessage[] {
+    return [
+      {
+        role: 'system',
+        content: `你是一位总结撰写专家。根据年终工作总结，生成一个 summary 类型幻灯片。
+只输出紧凑的纯 JSON 对象（不要换行缩进，不要代码块标记，不要任何额外文字）。
+格式：{"type":"summary","title":"年度总结","bullets":["**关键亮点**：总结描述"],"tags":["关键词"]}
+要求：bullets 3-5 条，提炼最核心的工作成果。tags 4-6 个，必须是工作能力关键词（如"架构设计能力"、"独立攻坚能力"、"跨团队协作"、"全栈开发"、"项目管理"），不要写具体技术栈名称（如 Vue3、TypeScript）。`,
+      },
+      {
+        role: 'user',
+        content: fullContent,
+      },
+    ]
+  }
+
   /** 构建总结生成的提示词 */
   buildSummaryPrompt(request: GenerateRequest): ChatMessage[] {
     const systemPrompt = this.buildSystemPrompt(request.style)

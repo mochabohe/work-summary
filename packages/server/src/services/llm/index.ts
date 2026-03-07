@@ -17,11 +17,12 @@ export class LLMService {
   }
 
   /** 流式对话，返回异步迭代器 */
-  async *streamChat(messages: ChatMessage[], model?: string): AsyncGenerator<string> {
+  async *streamChat(messages: ChatMessage[], model?: string, maxTokens?: number): AsyncGenerator<string> {
     const stream = await this.client.chat.completions.create({
       model: model || DEEPSEEK_CONFIG.defaultModel,
       messages,
       stream: true,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
     })
 
     for await (const chunk of stream) {
