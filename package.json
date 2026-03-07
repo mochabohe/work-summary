@@ -1,0 +1,21 @@
+{
+  "name": "work-summary",
+  "version": "1.0.0",
+  "private": true,
+  "description": "年终工作总结自动生成器",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @work-summary/server dev\" \"pnpm --filter @work-summary/client dev\"",
+    "dev:server": "pnpm --filter @work-summary/server dev",
+    "dev:client": "pnpm --filter @work-summary/client dev",
+    "build": "pnpm --filter @work-summary/shared build && pnpm --filter @work-summary/server build && pnpm --filter @work-summary/client build",
+    "build:client": "pnpm --filter @work-summary/client build",
+    "build:server": "pnpm --filter @work-summary/server build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

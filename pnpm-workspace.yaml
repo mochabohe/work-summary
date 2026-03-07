@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+
+ignoredBuiltDependencies:
+  - esbuild
+  - puppeteer
+  - vue-demi
