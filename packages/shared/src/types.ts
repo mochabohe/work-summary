@@ -44,7 +44,7 @@ export interface DocumentContent {
   /** 文件名 */
   filename: string
   /** 文件类型 */
-  type: 'pptx' | 'docx' | 'pdf' | 'md' | 'txt'
+  type: 'pptx' | 'docx' | 'pdf' | 'md' | 'txt' | 'html'
   /** 提取的文本内容 */
   content: string
 }
@@ -110,11 +110,9 @@ export interface GenerateRequest {
   /** 选中的总结维度 */
   dimensions: string[]
   /** 总结风格 */
-  style: 'formal' | 'semi-formal' | 'data-driven'
+  style: 'formal' | 'semi-formal'
   /** 用户自定义要求 */
   customPrompt?: string
-  /** 严格事实模式：只允许引用已采集数据，未证实内容改为模糊表达 */
-  strictFactMode?: boolean
 }
 
 /** 生成的总结 */

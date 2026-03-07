@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { Worker } from 'worker_threads'
 import { EXCLUDED_DIRS, DOCUMENT_EXTENSIONS } from '@work-summary/shared'
 import type { DocumentContent } from '@work-summary/shared'
 import { DocxParser } from './docx-parser.js'
@@ -30,10 +31,25 @@ export class ParserService {
     return documents
   }
 
+  /** 文件大小限制 */
+  private static MAX_TEXT_SIZE = 1 * 1024 * 1024   // md/txt: 1MB
+  private static MAX_HTML_SIZE = 200 * 1024         // html: 200KB（大 HTML 通常是构建产物，正则解析会阻塞）
+
   /** 解析单个文件 */
   async parseFile(filePath: string): Promise<DocumentContent | null> {
     const ext = path.extname(filePath).toLowerCase()
     const filename = path.basename(filePath)
+
+    // 检查文件大小，跳过过大的文件
+    if (['.md', '.txt', '.html', '.htm'].includes(ext)) {
+      const stat = await fs.stat(filePath)
+      const limit = ['.html', '.htm'].includes(ext)
+        ? ParserService.MAX_HTML_SIZE
+        : ParserService.MAX_TEXT_SIZE
+      if (stat.size > limit) {
+        return null
+      }
+    }
 
     switch (ext) {
       case '.docx':
@@ -65,6 +81,13 @@ export class ParserService {
           filename,
           type: 'txt',
           content: await fs.readFile(filePath, 'utf-8'),
+        }
+      case '.html':
+      case '.htm':
+        return {
+          filename,
+          type: 'html',
+          content: await this.extractTextFromHtmlAsync(await fs.readFile(filePath, 'utf-8')),
         }
       default:
         return null
@@ -121,6 +144,62 @@ export class ParserService {
     } catch {}
 
     return { entryFiles, modules, dependencies }
+  }
+
+  /**
+   * 在 Worker 线程中解析 HTML，避免正则阻塞主线程事件循环
+   * 超时后返回空字符串（跳过该文件）
+   */
+  private extractTextFromHtmlAsync(html: string, timeoutMs = 5000): Promise<string> {
+    return new Promise((resolve) => {
+      // Worker 代码：在独立线程中执行正则替换
+      const workerCode = `
+        const { workerData, parentPort } = require('worker_threads');
+        try {
+          const result = workerData
+            .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, '')
+            .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, '')
+            .replace(/<\\/(p|div|h[1-6]|li|tr|br\\s*\\/?)>/gi, '\\n')
+            .replace(/<br\\s*\\/?>/gi, '\\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/&quot;/gi, '"')
+            .replace(/&#39;/gi, "'")
+            .replace(/\\n{3,}/g, '\\n\\n')
+            .trim();
+          parentPort.postMessage(result);
+        } catch {
+          parentPort.postMessage('');
+        }
+      `;
+
+      try {
+        const worker = new Worker(workerCode, { eval: true, workerData: html });
+
+        const timer = setTimeout(() => {
+          worker.terminate();
+          resolve('');
+        }, timeoutMs);
+
+        worker.on('message', (result: string) => {
+          clearTimeout(timer);
+          worker.terminate();
+          resolve(result);
+        });
+
+        worker.on('error', () => {
+          clearTimeout(timer);
+          worker.terminate();
+          resolve('');
+        });
+      } catch {
+        // Worker 创建失败，回退到空字符串
+        resolve('');
+      }
+    });
   }
 
   /** 递归查找项目中的文档文件 */

@@ -9,9 +9,9 @@ export interface ChatMessage {
 export class LLMService {
   private client: OpenAI
 
-  constructor(apiKey: string) {
+  constructor() {
     this.client = new OpenAI({
-      apiKey,
+      apiKey: 'fc-proxy',  // FC 代理不验证此字段，Key 由代理服务端持有
       baseURL: DEEPSEEK_CONFIG.baseURL,
     })
   }
@@ -42,7 +42,7 @@ export class LLMService {
     return response.choices[0]?.message?.content || ''
   }
 
-  /** 验证 API Key 是否有效 */
+  /** 验证代理是否可用 */
   async validate(): Promise<boolean> {
     try {
       const response = await this.client.chat.completions.create({

@@ -5,7 +5,7 @@
         <span>扫描工作文件夹</span>
       </template>
 
-      <el-form label-width="100px">
+      <el-form label-width="100px" @submit.prevent>
         <el-form-item label="文件夹路径">
           <!-- 已添加的路径列表 -->
           <div class="path-tags" v-if="folderPaths.length > 0">
@@ -28,7 +28,7 @@
               clearable
               @keyup.enter="addPath"
             />
-            <el-button @click="addPath" :disabled="!currentPath.trim()">添加</el-button>
+            <el-button native-type="button" @click="addPath" :disabled="!currentPath.trim()">添加</el-button>
             <el-button
               type="primary"
               :loading="projectStore.scanning"
@@ -188,7 +188,8 @@ async function startScan() {
         progressInfo.value = event
       },
       async () => {
-        // 扫描完成，获取结果
+        // 扫描完成，更新进度到 100%
+        progressInfo.value = { phase: 'done', progress: 100, current: '', found: progressInfo.value?.found ?? { projects: 0, files: 0 } }
         try {
           const result = await getScanResult(taskId)
           projectStore.setScanResult(result)
@@ -219,6 +220,7 @@ function docTagType(type: string): '' | 'success' | 'warning' | 'danger' | 'info
     pptx: 'warning',
     pdf: 'danger',
     txt: 'info',
+    html: 'success',
   }
   return map[type] || 'info'
 }

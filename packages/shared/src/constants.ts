@@ -39,6 +39,8 @@ export const DOCUMENT_EXTENSIONS = [
   '.pdf',
   '.md',
   '.txt',
+  '.html',
+  '.htm',
 ] as const
 
 /** 代码文件扩展名 */
@@ -73,8 +75,8 @@ export const DIMENSION_SUGGESTIONS = [
   '部门分享',
 ] as const
 
-/** DeepSeek API 配置 */
+/** DeepSeek API 配置（通过 FC 代理，Key 由服务端持有，客户端无需配置） */
 export const DEEPSEEK_CONFIG = {
-  baseURL: 'https://api.deepseek.com',
+  baseURL: 'https://deepseek-stream-cgpnjvcloa.cn-hangzhou.fcapp.run',
   defaultModel: 'deepseek-chat',
 } as const

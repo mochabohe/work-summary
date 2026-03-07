@@ -2,7 +2,7 @@ import type { GenerateRequest } from '@work-summary/shared'
 
 /** 流式生成总结 (SSE) */
 export function streamGenerate(
-  request: GenerateRequest & { apiKey?: string },
+  request: GenerateRequest,
   onChunk: (chunk: string) => void,
   onDone: () => void,
   onError: (err: string) => void,
@@ -64,7 +64,6 @@ export function streamRefine(
     content: string
     instruction: string
     history?: { role: string; content: string }[]
-    apiKey?: string
   },
   onChunk: (chunk: string) => void,
   onDone: () => void,

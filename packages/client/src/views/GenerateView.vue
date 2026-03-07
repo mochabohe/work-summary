@@ -1,14 +1,14 @@
 <template>
   <div class="generate-view" :class="{ 'compare-active': compareActive }">
-    <!-- 对比模式：三栏布局 -->
+    <!-- 对比模式：两栏布局 -->
     <template v-if="compareActive">
       <div class="compare-header-bar">
         <div class="compare-title-area">
-          <span class="compare-title">三版本对比</span>
-          <span class="compare-subtitle">同一份数据，三种风格同时生成，选择最合适的版本</span>
+          <span class="compare-title">双版本对比</span>
+          <span class="compare-subtitle">同一份数据，两种风格同时生成，可直接编辑后选择</span>
         </div>
         <div class="compare-actions">
-          <el-button v-if="anyCompareGenerating" @click="abortAllCompare" type="danger" plain size="small">
+          <el-button v-if="anyCompareGenerating" @click="abortAllCompare" type="danger" plain>
             停止生成
           </el-button>
           <el-button @click="exitCompare">返回配置</el-button>
@@ -16,7 +16,7 @@
       </div>
 
       <el-row :gutter="12">
-        <el-col :span="8" v-for="s in styleOptions" :key="s.key">
+        <el-col :span="12" v-for="s in styleOptions" :key="s.key">
           <el-card class="compare-card">
             <template #header>
               <div class="compare-card-header">
@@ -25,6 +25,14 @@
                   <div class="compare-style-desc">{{ s.desc }}</div>
                 </div>
                 <div class="compare-card-btns">
+                  <el-button
+                    v-if="compareContents[s.key] && !compareGenerating[s.key]"
+                    size="small"
+                    :type="compareEditMode[s.key] ? 'info' : ''"
+                    @click="compareEditMode[s.key] = !compareEditMode[s.key]"
+                  >
+                    {{ compareEditMode[s.key] ? '预览' : '编辑' }}
+                  </el-button>
                   <el-button
                     v-if="compareContents[s.key] && !compareGenerating[s.key]"
                     size="small"
@@ -59,11 +67,22 @@
                 </div>
               </template>
 
-              <div
-                v-else-if="compareContents[s.key]"
-                class="markdown-preview"
-                v-html="renderMarkdown(compareContents[s.key])"
-              ></div>
+              <template v-else-if="compareContents[s.key]">
+                <!-- 编辑模式 -->
+                <div v-if="compareEditMode[s.key]" class="compare-edit-area">
+                  <div class="compare-edit-tip">直接修改 Markdown 内容，点击"选择此版本"应用</div>
+                  <textarea
+                    class="compare-textarea"
+                    v-model="compareContents[s.key]"
+                  ></textarea>
+                </div>
+                <!-- 预览模式 -->
+                <div
+                  v-else
+                  class="markdown-preview"
+                  v-html="renderMarkdown(compareContents[s.key])"
+                ></div>
+              </template>
 
               <div v-else class="compare-empty">
                 <el-empty description="等待生成" :image-size="60" />
@@ -107,11 +126,6 @@
                 <div class="collapsed-item">
                   <span class="collapsed-label">风格：</span>
                   <span>{{ styleLabel }}</span>
-                </div>
-                <div class="collapsed-item">
-                  <span class="collapsed-label">事实模式：</span>
-                  <el-tag v-if="summaryStore.strictFactMode" type="warning" size="small">严格</el-tag>
-                  <span v-else class="collapsed-auto">关闭</span>
                 </div>
                 <div v-if="summaryStore.customPrompt" class="collapsed-item">
                   <span class="collapsed-label">额外说明：</span>
@@ -178,22 +192,7 @@
                   <span class="style-desc">突出业务价值和战略意义，弱化技术细节，适合向上汇报</span>
                   <el-radio value="semi-formal">技术叙述</el-radio>
                   <span class="style-desc">兼顾业务成果和技术实现，可展开技术方案和攻坚过程</span>
-                  <el-radio value="data-driven">数据驱动</el-radio>
-                  <span class="style-desc">一切用数据说话，突出代码量、提交数、时间线等量化指标</span>
                 </el-radio-group>
-              </div>
-
-              <!-- 严格事实模式 -->
-              <div class="section">
-                <div class="fact-mode-row">
-                  <div class="fact-mode-info">
-                    <h4 style="margin-bottom: 2px;">严格事实模式</h4>
-                    <div class="fact-mode-desc">
-                      开启后 AI 只引用已采集的数据，未证实的内容将改为模糊表达，防止"幻觉"
-                    </div>
-                  </div>
-                  <el-switch v-model="summaryStore.strictFactMode" />
-                </div>
               </div>
 
               <!-- 自定义要求 -->
@@ -205,7 +204,7 @@
                   :rows="4"
                   placeholder="填写补充说明，如：侧重前端技术方面的总结、我是团队技术负责人..."
                 />
-                <div class="form-tip">此项仅影响重新生成。如需微调已有总结，请使用右侧「对话修改」</div>
+                <div class="form-tip">此项仅影响重新生成。如需微调已有总结，请点击右侧「继续修改」按钮</div>
               </div>
 
               <!-- 生成按钮组 -->
@@ -226,7 +225,7 @@
                   :disabled="!canGenerate || summaryStore.generating"
                   class="generate-btn"
                 >
-                  对比生成 (3种风格)
+                  对比生成 (2种风格)
                 </el-button>
               </div>
             </template>
@@ -239,13 +238,26 @@
             <template #header>
               <div class="preview-header">
                 <span>生成预览</span>
-                <el-button
-                  v-if="summaryStore.content"
-                  size="small"
-                  @click="copyContent"
-                >
-                  复制内容
-                </el-button>
+                <div class="preview-header-btns">
+                  <el-button
+                    v-if="summaryStore.content && !summaryStore.generating"
+                    size="small"
+                    :type="refining ? 'warning' : 'primary'"
+                    :plain="!refining"
+                    :loading="refining"
+                    :class="{ 'refine-btn-active': refining }"
+                    @click="!refining && (refineDialogVisible = true)"
+                  >
+                    {{ refining ? 'AI 修改中...' : '继续修改' }}
+                  </el-button>
+                  <el-button
+                    v-if="summaryStore.content"
+                    size="small"
+                    @click="copyContent"
+                  >
+                    复制内容
+                  </el-button>
+                </div>
               </div>
             </template>
 
@@ -254,46 +266,6 @@
             </div>
 
             <div v-else class="markdown-preview" v-html="renderedContent"></div>
-          </el-card>
-
-          <!-- 对话式修改 -->
-          <el-card v-if="summaryStore.content && !summaryStore.generating" class="chat-card">
-            <template #header>
-              <span>对话修改</span>
-            </template>
-
-            <div v-if="chatMessages.length > 0" class="chat-history">
-              <div
-                v-for="(msg, index) in chatMessages"
-                :key="index"
-                class="chat-msg"
-                :class="msg.role"
-              >
-                <div class="chat-role">{{ msg.role === 'user' ? '修改意见' : 'AI 回应' }}</div>
-                <div class="chat-text">{{ msg.role === 'user' ? msg.content : '已应用修改' }}</div>
-              </div>
-            </div>
-
-            <div class="chat-input-row">
-              <el-input
-                v-model="refineInput"
-                type="textarea"
-                :rows="2"
-                placeholder="输入修改意见，如：第二部分的数据不对，改成 xxx；把技术升级那段删掉；加一段关于团队管理的内容..."
-                :disabled="refining"
-                @keyup.ctrl.enter="submitRefine"
-              />
-              <el-button
-                type="primary"
-                @click="submitRefine"
-                :loading="refining"
-                :disabled="!refineInput.trim() || refining"
-                style="margin-top: 8px; align-self: flex-end;"
-              >
-                {{ refining ? '修改中...' : '提交修改' }}
-              </el-button>
-            </div>
-            <div class="form-tip">输入自然语言修改意见，AI 将基于当前总结进行调整。支持多轮对话，按 Ctrl+Enter 快捷提交</div>
           </el-card>
 
           <!-- 版本历史 -->
@@ -362,6 +334,64 @@
       </div>
     </template>
 
+    <!-- 对话修改弹窗 -->
+    <el-dialog
+      v-model="refineDialogVisible"
+      title="对话修改"
+      width="560px"
+      top="10vh"
+      :close-on-click-modal="!refining"
+      :close-on-press-escape="!refining"
+    >
+      <div class="refine-dialog-body">
+        <!-- 对话历史 -->
+        <div v-if="chatMessages.length > 0" class="refine-chat-history" ref="chatHistoryRef">
+          <div
+            v-for="(msg, index) in chatMessages"
+            :key="index"
+            class="chat-msg"
+            :class="msg.role"
+          >
+            <div class="chat-role">{{ msg.role === 'user' ? '修改意见' : 'AI 回应' }}</div>
+            <div class="chat-text">{{ msg.role === 'user' ? msg.content : '已应用修改' }}</div>
+          </div>
+          <div v-if="refining" class="chat-msg assistant">
+            <div class="chat-role">AI 回应</div>
+            <div class="chat-text refine-loading">
+              <span class="loading-dots"><span></span><span></span><span></span></span>
+              修改中...
+            </div>
+          </div>
+        </div>
+        <div v-else class="refine-empty-hint">
+          输入自然语言修改意见，AI 将基于当前总结进行调整。支持多轮对话。
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="refine-input-area">
+          <el-input
+            v-model="refineInput"
+            type="textarea"
+            :rows="3"
+            placeholder="如：第二部分的数据不对，改成 xxx；把技术升级那段删掉；加一段关于团队管理的内容..."
+            :disabled="refining"
+            @keyup.ctrl.enter="submitRefine"
+          />
+          <div class="refine-input-footer">
+            <span class="refine-shortcut-tip">Ctrl+Enter 快捷提交</span>
+            <el-button
+              type="primary"
+              @click="submitRefine"
+              :loading="refining"
+              :disabled="!refineInput.trim() || refining"
+            >
+              {{ refining ? '修改中...' : '提交修改' }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- Diff 对比弹窗 -->
     <el-dialog
       v-model="diffDialogVisible"
@@ -406,51 +436,61 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { diffLines, type Change } from 'diff'
 import { DIMENSION_SUGGESTIONS } from '@work-summary/shared'
 import { useProjectStore } from '@/stores/project'
-import { useSettingsStore } from '@/stores/settings'
 import { useSummaryStore } from '@/stores/summary'
 import { streamGenerate, streamRefine } from '@/api/generate'
 
 const router = useRouter()
 const projectStore = useProjectStore()
-const settings = useSettingsStore()
 const summaryStore = useSummaryStore()
 
 const md = new MarkdownIt()
 const customDim = ref('')
 const refineInput = ref('')
 const refining = ref(false)
+const refineDialogVisible = ref(false)
 const configCollapsed = ref(false)
 const chatMessages = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
+const chatHistoryRef = ref<HTMLElement | null>(null)
+
+// 对话消息变化时自动滚动到底部
+watch([chatMessages, refining], () => {
+  nextTick(() => {
+    if (chatHistoryRef.value) {
+      chatHistoryRef.value.scrollTop = chatHistoryRef.value.scrollHeight
+    }
+  })
+}, { deep: true })
 
 // ===== 对比模式状态 =====
 const compareActive = ref(false)
 const compareContents = reactive<Record<string, string>>({
   'formal': '',
   'semi-formal': '',
-  'data-driven': '',
 })
 const compareGenerating = reactive<Record<string, boolean>>({
   'formal': false,
   'semi-formal': false,
-  'data-driven': false,
+})
+const compareEditMode = reactive<Record<string, boolean>>({
+  'formal': false,
+  'semi-formal': false,
 })
 const compareAborts: (() => void)[] = []
 
 const styleOptions = [
   { key: 'formal', label: '业务导向', desc: '突出业务价值，适合向上汇报' },
   { key: 'semi-formal', label: '技术叙述', desc: '兼顾业务和技术，适合团队内' },
-  { key: 'data-driven', label: '数据驱动', desc: '量化指标为主，适合绩效评审' },
 ]
 
 const anyCompareGenerating = computed(() => {
-  return compareGenerating['formal'] || compareGenerating['semi-formal'] || compareGenerating['data-driven']
+  return compareGenerating['formal'] || compareGenerating['semi-formal']
 })
 
 // ===== 版本历史 Diff 状态 =====
@@ -468,7 +508,6 @@ const styleLabel = computed(() => {
   const map: Record<string, string> = {
     'formal': '业务导向',
     'semi-formal': '技术叙述',
-    'data-driven': '数据驱动',
   }
   return map[summaryStore.style] || summaryStore.style
 })
@@ -541,8 +580,6 @@ function generate() {
       dimensions: summaryStore.dimensions,
       style: summaryStore.style,
       customPrompt: summaryStore.customPrompt || undefined,
-      strictFactMode: summaryStore.strictFactMode || undefined,
-      apiKey: settings.apiKey,
     },
     (chunk) => {
       summaryStore.appendContent(chunk)
@@ -564,12 +601,13 @@ function generate() {
   )
 }
 
-// ===== 对比生成（3种风格并行） =====
+// ===== 对比生成（两种风格并行） =====
 function generateCompare() {
   compareActive.value = true
   for (const s of styleOptions) {
     compareContents[s.key] = ''
     compareGenerating[s.key] = true
+    compareEditMode[s.key] = false
   }
   compareAborts.length = 0
 
@@ -582,10 +620,8 @@ function generateCompare() {
         feishuDocs: summaryStore.feishuDocs,
         standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
         dimensions: summaryStore.dimensions,
-        style: s.key as 'formal' | 'semi-formal' | 'data-driven',
+        style: s.key as 'formal' | 'semi-formal',
         customPrompt: summaryStore.customPrompt || undefined,
-        strictFactMode: summaryStore.strictFactMode || undefined,
-        apiKey: settings.apiKey,
       },
       (chunk) => {
         compareContents[s.key] += chunk
@@ -594,8 +630,8 @@ function generateCompare() {
         compareContents[s.key] = cleanAIOutput(compareContents[s.key])
         compareGenerating[s.key] = false
 
-        if (!compareGenerating['formal'] && !compareGenerating['semi-formal'] && !compareGenerating['data-driven']) {
-          ElMessage.success('三个版本全部生成完成，请选择满意的版本')
+        if (!compareGenerating['formal'] && !compareGenerating['semi-formal']) {
+          ElMessage.success('两个版本全部生成完成，请选择满意的版本')
         }
       },
       (err) => {
@@ -609,7 +645,7 @@ function generateCompare() {
 
 function selectVersion(styleKey: string) {
   summaryStore.setContent(compareContents[styleKey])
-  summaryStore.style = styleKey as 'formal' | 'semi-formal' | 'data-driven'
+  summaryStore.style = styleKey as 'formal' | 'semi-formal'
   summaryStore.clearVersions()
   summaryStore.saveVersion('初始生成')
   compareActive.value = false
@@ -645,6 +681,7 @@ function submitRefine() {
   if (!instruction || refining.value) return
 
   refining.value = true
+  refineDialogVisible.value = false
 
   chatMessages.value.push({ role: 'user', content: instruction })
 
@@ -660,7 +697,6 @@ function submitRefine() {
       content: previousContent,
       instruction,
       history,
-      apiKey: settings.apiKey,
     },
     (chunk) => {
       summaryStore.appendContent(chunk)
@@ -684,6 +720,7 @@ function submitRefine() {
       summaryStore.setContent(previousContent)
       chatMessages.value.pop()
       refining.value = false
+      // 失败时保持弹窗打开，方便用户重新提交
       ElMessage.error(`修改失败: ${err}`)
     },
   )
@@ -859,6 +896,38 @@ function copyContent() {
   40% { opacity: 1; transform: scale(1); }
 }
 
+.compare-edit-area {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.compare-edit-tip {
+  font-size: 12px;
+  color: #909399;
+  padding: 4px 0 8px;
+  flex-shrink: 0;
+}
+
+.compare-textarea {
+  flex: 1;
+  width: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 10px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  color: #303133;
+  box-sizing: border-box;
+}
+
+.compare-textarea:focus {
+  border-color: #409eff;
+}
+
 .compare-empty {
   display: flex;
   align-items: center;
@@ -935,23 +1004,6 @@ function copyContent() {
   border-color: #409eff;
 }
 
-.fact-mode-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.fact-mode-info {
-  flex: 1;
-}
-
-.fact-mode-desc {
-  font-size: 12px;
-  color: #909399;
-  line-height: 1.4;
-}
-
 .generate-buttons {
   display: flex;
   gap: 10px;
@@ -1015,14 +1067,16 @@ function copyContent() {
   margin: 6px 0;
 }
 
-.chat-card {
-  margin-top: 16px;
+/* ===== 对话修改弹窗样式 ===== */
+.refine-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.chat-history {
-  max-height: 200px;
+.refine-chat-history {
+  max-height: 300px;
   overflow-y: auto;
-  margin-bottom: 12px;
   padding: 8px;
   background: #fafafa;
   border-radius: 6px;
@@ -1033,6 +1087,10 @@ function copyContent() {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
+}
+
+.chat-msg:last-child {
+  margin-bottom: 0;
 }
 
 .chat-msg.user {
@@ -1056,9 +1114,52 @@ function copyContent() {
   line-height: 1.5;
 }
 
-.chat-input-row {
+.refine-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #909399;
+}
+
+.refine-empty-hint {
+  font-size: 13px;
+  color: #909399;
+  line-height: 1.6;
+  padding: 12px 0;
+}
+
+.refine-input-area {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.refine-input-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refine-shortcut-tip {
+  font-size: 12px;
+  color: #c0c4cc;
+}
+
+/* ===== 继续修改按钮动画 ===== */
+.refine-btn-active {
+  animation: refine-pulse 2s ease-in-out infinite;
+  cursor: default !important;
+}
+
+@keyframes refine-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.preview-header-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .form-tip {

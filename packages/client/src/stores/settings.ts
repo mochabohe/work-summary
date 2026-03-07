@@ -6,7 +6,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const savedSettings = localStorage.getItem('work-summary-settings')
   const defaults = savedSettings ? JSON.parse(savedSettings) : {}
 
-  const apiKey = ref<string>(defaults.apiKey || '')
   const gitAuthor = ref<string>(defaults.gitAuthor || '')
   // 总结日期范围（YYYY-MM 格式）
   const now = new Date()
@@ -16,14 +15,13 @@ export const useSettingsStore = defineStore('settings', () => {
   // 自动保存到 localStorage
   function save() {
     localStorage.setItem('work-summary-settings', JSON.stringify({
-      apiKey: apiKey.value,
       gitAuthor: gitAuthor.value,
       startDate: startDate.value,
       endDate: endDate.value,
     }))
   }
 
-  watch([apiKey, gitAuthor, startDate, endDate], save, { deep: true })
+  watch([gitAuthor, startDate, endDate], save, { deep: true })
 
   /** 获取 Git 查询用的开始日期（YYYY-MM-DD） */
   function getGitSince(): string {
@@ -42,7 +40,6 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    apiKey,
     gitAuthor,
     startDate,
     endDate,

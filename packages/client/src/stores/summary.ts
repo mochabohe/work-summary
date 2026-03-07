@@ -19,11 +19,9 @@ export const useSummaryStore = defineStore('summary', () => {
   /** 总结维度（用户可自定义） */
   const dimensions = ref<string[]>([])
   /** 总结风格 */
-  const style = ref<'formal' | 'semi-formal' | 'data-driven'>('semi-formal')
+  const style = ref<'formal' | 'semi-formal'>('semi-formal')
   /** 用户自定义要求 */
   const customPrompt = ref('')
-  /** 严格事实模式 */
-  const strictFactMode = ref(false)
   /** 补充文档 */
   const feishuDocs = ref<{ content: string }[]>([])
   /** 版本历史 */
@@ -70,7 +68,6 @@ export const useSummaryStore = defineStore('summary', () => {
     generating.value = false
     content.value = ''
     customPrompt.value = ''
-    strictFactMode.value = false
     feishuDocs.value = []
     versions.value = []
   }
@@ -81,7 +78,6 @@ export const useSummaryStore = defineStore('summary', () => {
     dimensions,
     style,
     customPrompt,
-    strictFactMode,
     feishuDocs,
     versions,
     setContent,

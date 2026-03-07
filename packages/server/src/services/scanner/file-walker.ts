@@ -74,9 +74,12 @@ export class FileWalker {
         })
 
         onFound?.(currentPath, projects.length)
+
+        // 已识别为项目，不再递归子目录（避免 monorepo 子包被当作独立项目）
+        return
       }
 
-      // 继续递归子目录（但不进入已识别项目的 node_modules 等）
+      // 当前目录不是项目，继续递归子目录查找
       const subDirs = entries.filter((e) => e.isDirectory())
       for (const dir of subDirs) {
         const fullPath = path.join(currentPath, dir.name)

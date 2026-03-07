@@ -68,14 +68,22 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ success: false, error: '任务不存在' })
     }
 
+    // 接管响应，阻止 Fastify 在 handler 返回后自动发送/关闭响应
+    reply.hijack()
+
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     })
 
     const listener = (data: string) => {
-      reply.raw.write(`data: ${data}\n\n`)
+      try {
+        reply.raw.write(`data: ${data}\n\n`)
+      } catch {
+        // 连接已关闭，忽略写入错误
+      }
     }
 
     task.listeners.add(listener)
@@ -87,8 +95,18 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       return
     }
 
+    // SSE 心跳，防止长时间无数据导致连接断开
+    const heartbeat = setInterval(() => {
+      try {
+        reply.raw.write(': heartbeat\n\n')
+      } catch {
+        clearInterval(heartbeat)
+      }
+    }, 15000)
+
     // 连接关闭时清理
     request.raw.on('close', () => {
+      clearInterval(heartbeat)
       task.listeners.delete(listener)
     })
   })

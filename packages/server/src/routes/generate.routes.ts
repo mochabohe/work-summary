@@ -6,20 +6,24 @@ import type { GenerateRequest } from '@work-summary/shared'
 export const generateRoutes: FastifyPluginAsync = async (app) => {
   // AI 流式生成总结
   app.post<{
-    Body: GenerateRequest & { apiKey?: string }
+    Body: GenerateRequest
   }>('/summary', async (request, reply) => {
-    const { projects, feishuDocs, standaloneDocuments, dimensions, style, customPrompt, strictFactMode, apiKey } = request.body
+    const { projects, feishuDocs, standaloneDocuments, dimensions, style, customPrompt } = request.body
 
-    const key = apiKey || process.env.DEEPSEEK_API_KEY
-    if (!key) {
-      return reply.status(400).send({ success: false, error: '请提供 DeepSeek API Key' })
-    }
+    // 接管响应，阻止 Fastify 在 handler 返回后自动处理
+    reply.hijack()
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     })
+
+    // SSE 心跳，防止长时间无数据导致连接断开
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(': heartbeat\n\n') } catch { clearInterval(heartbeat) }
+    }, 15000)
 
     try {
       const promptBuilder = new PromptBuilder()
@@ -30,10 +34,9 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
         dimensions,
         style,
         customPrompt,
-        strictFactMode,
       })
 
-      const llm = new LLMService(key)
+      const llm = new LLMService()
 
       for await (const chunk of llm.streamChat(messages)) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
@@ -43,29 +46,34 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: (err as Error).message })}\n\n`)
     } finally {
+      clearInterval(heartbeat)
       reply.raw.end()
     }
   })
 
   // 对话式修改总结
   app.post<{
-    Body: { content: string; instruction: string; history?: { role: string; content: string }[]; apiKey?: string }
+    Body: { content: string; instruction: string; history?: { role: string; content: string }[] }
   }>('/refine', async (request, reply) => {
-    const { content, instruction, history, apiKey } = request.body
+    const { content, instruction, history } = request.body
 
-    const key = apiKey || process.env.DEEPSEEK_API_KEY
-    if (!key) {
-      return reply.status(400).send({ success: false, error: '请提供 DeepSeek API Key' })
-    }
+    // 接管响应，阻止 Fastify 在 handler 返回后自动处理
+    reply.hijack()
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     })
 
+    // SSE 心跳，防止长时间无数据导致连接断开
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(': heartbeat\n\n') } catch { clearInterval(heartbeat) }
+    }, 15000)
+
     try {
-      const llm = new LLMService(key)
+      const llm = new LLMService()
 
       const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         {
@@ -115,6 +123,7 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: (err as Error).message })}\n\n`)
     } finally {
+      clearInterval(heartbeat)
       reply.raw.end()
     }
   })

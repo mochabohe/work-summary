@@ -84,15 +84,34 @@ export class ScannerService {
     }
 
     // 阶段3: 查找并解析独立文档文件（不属于任何项目的文档）
+    onProgress?.({
+      phase: 'parsing',
+      progress: 80,
+      current: '查找独立文档...',
+      found: { projects: allProjects.length, files: totalFiles },
+    })
+
     const projectPathSet = new Set(allProjects.map((p) => p.path))
     const standaloneDocFiles = await this.walker.findStandaloneDocuments(folderPaths, projectPathSet)
     const standaloneDocuments: DocumentContent[] = []
 
     if (standaloneDocFiles.length > 0) {
       const parser = new ParserService()
-      for (const filePath of standaloneDocFiles) {
+      for (let i = 0; i < standaloneDocFiles.length; i++) {
+        const filePath = standaloneDocFiles[i]
+        const fileName = filePath.split(/[\\/]/).pop() || filePath
+        onProgress?.({
+          phase: 'parsing',
+          progress: 80 + Math.round(((i + 1) / standaloneDocFiles.length) * 20),
+          current: `解析文档: ${fileName}`,
+          found: { projects: allProjects.length, files: totalFiles },
+        })
         try {
-          const doc = await parser.parseFile(filePath)
+          // 单个文件解析超时 10 秒，避免大文件阻塞整个扫描
+          const doc = await Promise.race([
+            parser.parseFile(filePath),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+          ])
           if (doc && doc.content.trim().length > 0) {
             standaloneDocuments.push(doc)
           }

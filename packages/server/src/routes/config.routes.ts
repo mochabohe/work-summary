@@ -3,14 +3,10 @@ import { LLMService } from '../services/llm/index.js'
 import type { ApiResponse } from '@work-summary/shared'
 
 export const configRoutes: FastifyPluginAsync = async (app) => {
-  // 验证 API Key
-  app.post<{
-    Body: { apiKey: string }
-  }>('/validate-llm', async (request, reply) => {
-    const { apiKey } = request.body
-
+  // 验证代理是否可用
+  app.post('/validate-llm', async (request, reply) => {
     try {
-      const llm = new LLMService(apiKey)
+      const llm = new LLMService()
       const valid = await llm.validate()
 
       const response: ApiResponse<{ valid: boolean; models: string[] }> = {
@@ -21,7 +17,7 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
         },
       }
       return reply.send(response)
-    } catch (err) {
+    } catch {
       return reply.send({
         success: true,
         data: { valid: false, models: [] },
