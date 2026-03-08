@@ -2,11 +2,11 @@
   <div class="feishu-view">
     <el-card>
       <template #header>
-        <span>补充文档</span>
+        <span>补充材料</span>
       </template>
 
       <p class="section-desc">
-        粘贴飞书文档、会议纪要、周报等补充内容，AI 会将这些内容纳入总结参考。可添加多份文档。
+        粘贴会议纪要、周报、项目文档等补充材料，AI 会将这些内容纳入总结参考。可添加多份文档。
       </p>
 
       <!-- 粘贴输入区 -->

@@ -27,7 +27,7 @@ const pageTitles: Record<string, string> = {
   '/settings': '配置设置',
   '/scan': '扫描文件',
   '/analysis': '分析结果',
-  '/feishu': '补充文档',
+  '/feishu': '补充材料',
   '/generate': '生成总结',
   '/preview': '预览导出',
 }
@@ -41,7 +41,7 @@ const stepMap: Record<string, number> = {
   '/preview': 5,
 }
 
-const pageTitle = computed(() => pageTitles[route.path] || '年终工作总结生成器')
+const pageTitle = computed(() => pageTitles[route.path] || '智能工作总结生成器')
 const currentStep = computed(() => stepMap[route.path] ?? -1)
 </script>
 

@@ -5,6 +5,7 @@ import { analysisRoutes } from './routes/analysis.routes.js'
 import { generateRoutes } from './routes/generate.routes.js'
 import { exportRoutes } from './routes/export.routes.js'
 import { configRoutes } from './routes/config.routes.js'
+import { fsRoutes } from './routes/fs.routes.js'
 
 export async function createApp() {
   const app = Fastify({
@@ -22,6 +23,7 @@ export async function createApp() {
   await app.register(generateRoutes, { prefix: '/api/v1/generate' })
   await app.register(exportRoutes, { prefix: '/api/v1/export' })
   await app.register(configRoutes, { prefix: '/api/v1/config' })
+  await app.register(fsRoutes, { prefix: '/api/v1/fs' })
 
   // 健康检查
   app.get('/api/health', async () => {

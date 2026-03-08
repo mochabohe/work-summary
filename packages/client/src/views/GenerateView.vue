@@ -23,6 +23,9 @@
                 <div>
                   <span class="compare-style-name">{{ s.label }}</span>
                   <div class="compare-style-desc">{{ s.desc }}</div>
+                  <span v-if="compareContents[s.key] && !compareGenerating[s.key]" class="compare-stats">
+                    {{ getCompareStats(s.key).chars }} 字 · {{ getCompareStats(s.key).sections }} 个板块
+                  </span>
                 </div>
                 <div class="compare-card-btns">
                   <el-button
@@ -63,7 +66,8 @@
                   <span class="loading-dots">
                     <span></span><span></span><span></span>
                   </span>
-                  生成中...
+                  <span v-if="compareProgress[s.key]">{{ compareProgress[s.key] }}</span>
+                  <span v-else>正在连接...</span>
                 </div>
               </template>
 
@@ -127,9 +131,21 @@
                   <span class="collapsed-label">风格：</span>
                   <span>{{ styleLabel }}</span>
                 </div>
-                <div v-if="summaryStore.customPrompt" class="collapsed-item">
-                  <span class="collapsed-label">额外说明：</span>
-                  <span class="collapsed-prompt">{{ summaryStore.customPrompt }}</span>
+                <div class="collapsed-item">
+                  <span class="collapsed-label">类型：</span>
+                  <span>{{ docTypeLabel }}</span>
+                </div>
+                <div class="collapsed-item">
+                  <span class="collapsed-label">读者：</span>
+                  <span>{{ audienceLabel }}</span>
+                </div>
+                <div class="collapsed-item">
+                  <span class="collapsed-label">输出：</span>
+                  <span>{{ writingSummaryLabel }}</span>
+                </div>
+                <div v-if="summaryStore.businessContext" class="collapsed-item">
+                  <span class="collapsed-label">补充说明：</span>
+                  <span class="collapsed-prompt">{{ summaryStore.businessContext }}</span>
                 </div>
                 <el-button
                   type="primary"
@@ -195,16 +211,53 @@
                 </el-radio-group>
               </div>
 
-              <!-- 自定义要求 -->
+              <!-- 写作控制 -->
               <div class="section">
-                <h4>额外说明 (可选)</h4>
+                <h4>写作控制</h4>
+                <div class="writing-grid">
+                  <div class="writing-item">
+                    <span class="writing-label">文档类型</span>
+                    <el-select v-model="summaryStore.docType" size="small">
+                      <el-option v-for="item in docTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                  <div class="writing-item">
+                    <span class="writing-label">目标读者</span>
+                    <el-select v-model="summaryStore.audience" size="small">
+                      <el-option v-for="item in audienceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                  <div class="writing-item">
+                    <span class="writing-label">语气偏好</span>
+                    <el-select v-model="summaryStore.tone" size="small">
+                      <el-option v-for="item in toneOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                  <div class="writing-item">
+                    <span class="writing-label">输出长度</span>
+                    <el-select v-model="summaryStore.length" size="small">
+                      <el-option v-for="item in lengthOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                  <div class="writing-item">
+                    <span class="writing-label">输出语言</span>
+                    <el-select v-model="summaryStore.language" size="small">
+                      <el-option v-for="item in languageOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 补充说明 -->
+              <div class="section">
+                <h4>补充说明 (可选)</h4>
                 <el-input
-                  v-model="summaryStore.customPrompt"
+                  v-model="summaryStore.businessContext"
                   type="textarea"
                   :rows="4"
-                  placeholder="填写补充说明，如：侧重前端技术方面的总结、我是团队技术负责人..."
+                  placeholder="业务背景、额外要求等，如：&#10;· 负责电商交易链路重构，支撑双十一峰值流量&#10;· 侧重前端技术方面的总结&#10;· 我是团队技术负责人"
                 />
-                <div class="form-tip">此项仅影响重新生成。如需微调已有总结，请点击右侧「继续修改」按钮</div>
+                <div class="form-tip">帮助 AI 理解业务背景和你的侧重点，生成更有针对性的总结</div>
               </div>
 
               <!-- 生成按钮组 -->
@@ -221,8 +274,17 @@
                 </el-button>
                 <el-button
                   size="large"
-                  @click="generateCompare"
+                  @click="generateOutline"
+                  :loading="outlineGenerating"
                   :disabled="!canGenerate || summaryStore.generating"
+                  class="generate-btn"
+                >
+                  先生成大纲
+                </el-button>
+                <el-button
+                  size="large"
+                  @click="generateCompare"
+                  :disabled="!canGenerate || summaryStore.generating || outlineGenerating"
                   class="generate-btn"
                 >
                   对比生成 (2种风格)
@@ -232,12 +294,73 @@
           </el-card>
         </el-col>
 
-        <!-- 右侧: 生成结果预览 -->
+        <!-- 右侧: 生成结果预览 / 大纲编辑 -->
         <el-col :span="14">
-          <el-card class="preview-card">
+          <!-- 大纲编辑视图 -->
+          <el-card v-if="outline.length > 0 && !summaryStore.content" class="preview-card outline-card">
+            <template #header>
+              <div class="preview-header">
+                <div class="preview-header-left">
+                  <span>大纲编辑</span>
+                  <span class="content-stats">可调整章节顺序、编辑标题和要点</span>
+                </div>
+              </div>
+            </template>
+
+            <div class="outline-editor">
+              <div v-for="(item, i) in outline" :key="i" class="outline-item">
+                <div class="outline-item-header">
+                  <span class="outline-index">{{ i + 1 }}</span>
+                  <el-input v-model="item.title" size="small" class="outline-title-input" placeholder="章节标题" />
+                  <el-button size="small" :disabled="i === 0" @click="moveOutline(i, -1)" title="上移">↑</el-button>
+                  <el-button size="small" :disabled="i === outline.length - 1" @click="moveOutline(i, 1)" title="下移">↓</el-button>
+                  <el-button size="small" type="danger" plain @click="outline.splice(i, 1)" title="删除">✕</el-button>
+                </div>
+                <div class="outline-points">
+                  <div v-for="(_, j) in item.points" :key="j" class="outline-point">
+                    <el-input v-model="item.points[j]" size="small" placeholder="要点描述" />
+                    <el-button size="small" text @click="item.points.splice(j, 1)" title="删除要点">✕</el-button>
+                  </div>
+                  <el-button size="small" text @click="item.points.push('')" class="add-point-btn">+ 添加要点</el-button>
+                </div>
+              </div>
+              <el-button size="small" text @click="outline.push({ title: '', points: [''] })" class="add-section-btn">+ 添加章节</el-button>
+            </div>
+
+            <div class="outline-actions">
+              <el-button @click="outline = []">放弃大纲</el-button>
+              <el-button type="primary" @click="generateFromOutline" :loading="summaryStore.generating">
+                基于大纲生成全文
+              </el-button>
+            </div>
+          </el-card>
+
+          <!-- 大纲生成中 -->
+          <el-card v-else-if="outlineGenerating" class="preview-card">
             <template #header>
               <div class="preview-header">
                 <span>生成预览</span>
+              </div>
+            </template>
+            <div class="generating-progress">
+              <div class="generating-spinner">
+                <span class="loading-dots"><span></span><span></span><span></span></span>
+              </div>
+              <p class="generating-phase">{{ generateProgress || '正在生成大纲...' }}</p>
+              <p class="generating-hint">AI 正在分析数据并生成结构化大纲</p>
+            </div>
+          </el-card>
+
+          <!-- 正常预览卡片 -->
+          <el-card v-else class="preview-card">
+            <template #header>
+              <div class="preview-header">
+                <div class="preview-header-left">
+                  <span>生成预览</span>
+                  <span v-if="summaryStore.content && !summaryStore.generating" class="content-stats">
+                    {{ contentStats.chars }} 字 · {{ contentStats.paragraphs }} 段 · {{ contentStats.sections }} 个板块
+                  </span>
+                </div>
                 <div class="preview-header-btns">
                   <el-button
                     v-if="summaryStore.content && !summaryStore.generating"
@@ -265,7 +388,46 @@
               <el-empty description="配置完成后点击生成按钮" />
             </div>
 
-            <div v-else class="markdown-preview" v-html="renderedContent"></div>
+            <!-- 生成中且尚无内容时显示加载提示 -->
+            <div v-else-if="summaryStore.generating && !summaryStore.content" class="generating-progress">
+              <div class="generating-spinner">
+                <span class="loading-dots"><span></span><span></span><span></span></span>
+              </div>
+              <p class="generating-phase">{{ generateProgress || '正在连接...' }}</p>
+              <p class="generating-hint">AI 正在分析数据并生成总结，内容将实时显示</p>
+            </div>
+
+            <!-- 分段渲染：每个 ## 章节独立显示，悬浮显示操作栏 -->
+            <div v-else class="sections-preview">
+              <div
+                v-for="(section, i) in sections"
+                :key="i"
+                class="section-block"
+                @mouseenter="hoverSection = i"
+                @mouseleave="hoverSection = -1"
+              >
+                <div
+                  v-if="section.isSection && hoverSection === i && !summaryStore.generating && refiningSection === -1"
+                  class="section-toolbar"
+                >
+                  <el-button size="small" @click="refineSection(i, '让这段表述更专业、更有力度')">润色</el-button>
+                  <el-button size="small" @click="refineSection(i, '补充量化数据和具体成果')">补数据</el-button>
+                  <el-button size="small" @click="refineSection(i, '缩写为原来的一半篇幅')">缩写</el-button>
+                  <el-button size="small" @click="refineSection(i, '扩写为原来的两倍篇幅，补充更多细节')">扩写</el-button>
+                  <el-button size="small" @click="openCustomRefine(i)">自定义</el-button>
+                </div>
+                <!-- 修改中的加载遮罩 -->
+                <div v-if="refiningSection === i" class="section-loading-overlay">
+                  <span class="loading-dots"><span></span><span></span><span></span></span>
+                  <span class="section-loading-text">AI 正在修改该章节...</span>
+                </div>
+                <div
+                  class="section-content markdown-preview"
+                  :class="{ 'section-refining': refiningSection === i }"
+                  v-html="section.html"
+                ></div>
+              </div>
+            </div>
           </el-card>
 
           <!-- 版本历史 -->
@@ -345,9 +507,9 @@
     >
       <div class="refine-dialog-body">
         <!-- 对话历史 -->
-        <div v-if="chatMessages.length > 0" class="refine-chat-history" ref="chatHistoryRef">
+        <div v-if="summaryStore.chatMessages.length > 0" class="refine-chat-history" ref="chatHistoryRef">
           <div
-            v-for="(msg, index) in chatMessages"
+            v-for="(msg, index) in summaryStore.chatMessages"
             :key="index"
             class="chat-msg"
             :class="msg.role"
@@ -390,6 +552,29 @@
           </div>
         </div>
       </div>
+    </el-dialog>
+
+    <!-- 自定义章节修改弹窗 -->
+    <el-dialog
+      v-model="customRefineDialog"
+      title="自定义修改"
+      width="480px"
+      :close-on-click-modal="true"
+    >
+      <div class="custom-refine-body">
+        <p class="custom-refine-hint">输入对该章节的修改要求：</p>
+        <el-input
+          v-model="customRefineInput"
+          type="textarea"
+          :rows="3"
+          placeholder="如：改成第一人称、添加项目成果数据、语气更加正式..."
+          @keyup.ctrl.enter="submitCustomRefine"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="customRefineDialog = false">取消</el-button>
+        <el-button type="primary" @click="submitCustomRefine" :disabled="!customRefineInput.trim()">开始修改</el-button>
+      </template>
     </el-dialog>
 
     <!-- Diff 对比弹窗 -->
@@ -444,23 +629,63 @@ import { diffLines, type Change } from 'diff'
 import { DIMENSION_SUGGESTIONS } from '@work-summary/shared'
 import { useProjectStore } from '@/stores/project'
 import { useSummaryStore } from '@/stores/summary'
-import { streamGenerate, streamRefine } from '@/api/generate'
+import { useSettingsStore } from '@/stores/settings'
+import { streamGenerate, streamRefine, streamRefineSection, streamGenerateOutline, streamFromOutline } from '@/api/generate'
 
 const router = useRouter()
 const projectStore = useProjectStore()
 const summaryStore = useSummaryStore()
+const settingsStore = useSettingsStore()
 
 const md = new MarkdownIt()
 const customDim = ref('')
 const refineInput = ref('')
 const refining = ref(false)
+const generateProgress = ref('')
 const refineDialogVisible = ref(false)
 const configCollapsed = ref(false)
-const chatMessages = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
 const chatHistoryRef = ref<HTMLElement | null>(null)
 
+// ===== 章节级修改状态 =====
+const hoverSection = ref(-1)
+const refiningSection = ref(-1)
+const customRefineDialog = ref(false)
+const customRefineInput = ref('')
+const customRefineTarget = ref(-1)
+
+// ===== 大纲模式状态 =====
+const outline = ref<{ title: string; points: string[] }[]>([])
+const outlineGenerating = ref(false)
+
+// 按 ## 拆分的章节列表（用于分段渲染和悬浮操作）
+const sections = computed(() => {
+  const text = summaryStore.content
+  if (!text) return []
+  const parts = text.split(/(?=^## )/m)
+  return parts.map((part, index) => ({
+    index,
+    raw: part,
+    html: md.render(part),
+    isSection: part.trimStart().startsWith('## '),
+  }))
+})
+
+// 内容统计
+const contentStats = computed(() => {
+  const text = summaryStore.content
+  if (!text) return { chars: 0, paragraphs: 0, sections: 0 }
+  // 中文字数：去除 Markdown 标记和空白后的纯文本字符数
+  const plain = text.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').replace(/[*_~`>-]/g, '').trim()
+  const chars = plain.replace(/\s+/g, '').length
+  // 段落数：非空行中以数字序号开头的要点行数
+  const paragraphs = text.split('\n').filter(l => /^\d+\.\s/.test(l.trim())).length
+  // 板块数：二级标题数
+  const sections = text.split('\n').filter(l => /^##\s/.test(l.trim())).length
+  return { chars, paragraphs, sections }
+})
+
 // 对话消息变化时自动滚动到底部
-watch([chatMessages, refining], () => {
+watch([() => summaryStore.chatMessages, refining], () => {
   nextTick(() => {
     if (chatHistoryRef.value) {
       chatHistoryRef.value.scrollTop = chatHistoryRef.value.scrollHeight
@@ -478,6 +703,10 @@ const compareGenerating = reactive<Record<string, boolean>>({
   'formal': false,
   'semi-formal': false,
 })
+const compareProgress = reactive<Record<string, string>>({
+  'formal': '',
+  'semi-formal': '',
+})
 const compareEditMode = reactive<Record<string, boolean>>({
   'formal': false,
   'semi-formal': false,
@@ -488,6 +717,39 @@ const styleOptions = [
   { key: 'formal', label: '业务导向', desc: '突出业务价值，适合向上汇报' },
   { key: 'semi-formal', label: '技术叙述', desc: '兼顾业务和技术，适合团队内' },
 ]
+
+const docTypeOptions = [
+  { value: 'yearly-summary', label: '年终总结' },
+  { value: 'quarterly-review', label: '季度复盘' },
+  { value: 'monthly-report', label: '月度汇报' },
+  { value: 'promotion-report', label: '晋升述职' },
+  { value: 'project-retro', label: '项目复盘' },
+  { value: 'resume', label: '求职简历' },
+] as const
+
+const audienceOptions = [
+  { value: 'manager', label: '直属上级' },
+  { value: 'tech-lead', label: '技术负责人' },
+  { value: 'cross-team', label: '跨团队评审' },
+  { value: 'self-archive', label: '个人归档' },
+] as const
+
+const toneOptions = [
+  { value: 'professional', label: '专业稳健' },
+  { value: 'concise', label: '简洁直达' },
+  { value: 'result-driven', label: '结果导向' },
+] as const
+
+const lengthOptions = [
+  { value: 'short', label: '精简版' },
+  { value: 'medium', label: '标准版' },
+  { value: 'long', label: '详细版' },
+] as const
+
+const languageOptions = [
+  { value: 'zh-CN', label: '中文' },
+  { value: 'en-US', label: 'English' },
+] as const
 
 const anyCompareGenerating = computed(() => {
   return compareGenerating['formal'] || compareGenerating['semi-formal']
@@ -515,6 +777,17 @@ const styleLabel = computed(() => {
 const availableSuggestions = computed(() => {
   return DIMENSION_SUGGESTIONS.filter(s => !summaryStore.dimensions.includes(s))
 })
+
+function findOptionLabel(options: readonly { value: string; label: string }[], value: string): string {
+  return options.find((item) => item.value === value)?.label || value
+}
+
+const docTypeLabel = computed(() => findOptionLabel(docTypeOptions, summaryStore.docType))
+const audienceLabel = computed(() => findOptionLabel(audienceOptions, summaryStore.audience))
+const toneLabel = computed(() => findOptionLabel(toneOptions, summaryStore.tone))
+const lengthLabel = computed(() => findOptionLabel(lengthOptions, summaryStore.length))
+const languageLabel = computed(() => findOptionLabel(languageOptions, summaryStore.language))
+const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.value} / ${languageLabel.value}`)
 
 const canGenerate = computed(() => {
   return projectStore.analyses.size > 0
@@ -568,19 +841,12 @@ function generate() {
   summaryStore.generating = true
   summaryStore.setContent('')
   summaryStore.clearVersions()
-  chatMessages.value = []
-
-  const analyses = projectStore.getSelectedAnalyses()
+  summaryStore.chatMessages = []
+  generateProgress.value = ''
+  outline.value = []
 
   streamGenerate(
-    {
-      projects: analyses,
-      feishuDocs: summaryStore.feishuDocs,
-      standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
-      dimensions: summaryStore.dimensions,
-      style: summaryStore.style,
-      customPrompt: summaryStore.customPrompt || undefined,
-    },
+    buildGenerateRequest(),
     (chunk) => {
       summaryStore.appendContent(chunk)
     },
@@ -590,13 +856,18 @@ function generate() {
         summaryStore.setContent(cleaned)
       }
       summaryStore.generating = false
+      generateProgress.value = ''
       summaryStore.saveVersion('初始生成')
       configCollapsed.value = true
       ElMessage.success('总结生成完成!')
     },
     (err) => {
       summaryStore.generating = false
+      generateProgress.value = ''
       ElMessage.error(`生成失败: ${err}`)
+    },
+    (progress) => {
+      generateProgress.value = progress
     },
   )
 }
@@ -607,21 +878,16 @@ function generateCompare() {
   for (const s of styleOptions) {
     compareContents[s.key] = ''
     compareGenerating[s.key] = true
+    compareProgress[s.key] = ''
     compareEditMode[s.key] = false
   }
   compareAborts.length = 0
 
-  const analyses = projectStore.getSelectedAnalyses()
-
   for (const s of styleOptions) {
     const abort = streamGenerate(
       {
-        projects: analyses,
-        feishuDocs: summaryStore.feishuDocs,
-        standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
-        dimensions: summaryStore.dimensions,
+        ...buildGenerateRequest(),
         style: s.key as 'formal' | 'semi-formal',
-        customPrompt: summaryStore.customPrompt || undefined,
       },
       (chunk) => {
         compareContents[s.key] += chunk
@@ -638,6 +904,9 @@ function generateCompare() {
         compareGenerating[s.key] = false
         ElMessage.error(`「${s.label}」生成失败: ${err}`)
       },
+      (progress) => {
+        compareProgress[s.key] = progress
+      },
     )
     compareAborts.push(abort)
   }
@@ -649,7 +918,7 @@ function selectVersion(styleKey: string) {
   summaryStore.clearVersions()
   summaryStore.saveVersion('初始生成')
   compareActive.value = false
-  chatMessages.value = []
+  summaryStore.chatMessages = []
   configCollapsed.value = true
   const label = styleOptions.find(s => s.key === styleKey)?.label || styleKey
   ElMessage.success(`已选择「${label}」版本，可继续使用对话修改`)
@@ -670,6 +939,15 @@ function exitCompare() {
   compareActive.value = false
 }
 
+function getCompareStats(styleKey: string) {
+  const text = compareContents[styleKey]
+  if (!text) return { chars: 0, sections: 0 }
+  const plain = text.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').replace(/[*_~`>-]/g, '').trim()
+  const chars = plain.replace(/\s+/g, '').length
+  const sections = text.split('\n').filter(l => /^##\s/.test(l.trim())).length
+  return { chars, sections }
+}
+
 function copyCompareContent(styleKey: string) {
   navigator.clipboard.writeText(compareContents[styleKey])
   ElMessage.success('已复制到剪贴板')
@@ -683,9 +961,9 @@ function submitRefine() {
   refining.value = true
   refineDialogVisible.value = false
 
-  chatMessages.value.push({ role: 'user', content: instruction })
+  summaryStore.chatMessages.push({ role: 'user', content: instruction })
 
-  const history = chatMessages.value.length <= 1
+  const history = summaryStore.chatMessages.length <= 1
     ? undefined
     : buildChatHistory()
 
@@ -707,7 +985,7 @@ function submitRefine() {
         summaryStore.setContent(cleaned)
       }
 
-      chatMessages.value.push({ role: 'assistant', content: summaryStore.content })
+      summaryStore.chatMessages.push({ role: 'assistant', content: summaryStore.content })
 
       // 保存版本快照
       summaryStore.saveVersion(instruction)
@@ -718,7 +996,7 @@ function submitRefine() {
     },
     (err) => {
       summaryStore.setContent(previousContent)
-      chatMessages.value.pop()
+      summaryStore.chatMessages.pop()
       refining.value = false
       // 失败时保持弹窗打开，方便用户重新提交
       ElMessage.error(`修改失败: ${err}`)
@@ -727,7 +1005,7 @@ function submitRefine() {
 }
 
 function buildChatHistory(): { role: string; content: string }[] {
-  return chatMessages.value.slice(0, -1)
+  return summaryStore.chatMessages.slice(0, -1)
 }
 
 // ===== 版本历史操作 =====
@@ -774,6 +1052,149 @@ async function handleRollback(index: number) {
 function copyContent() {
   navigator.clipboard.writeText(summaryStore.content)
   ElMessage.success('已复制到剪贴板')
+}
+
+// ===== 章节级修改 =====
+function refineSection(sectionIndex: number, instruction: string) {
+  if (refiningSection.value !== -1) return
+  refiningSection.value = sectionIndex
+
+  // 获取章节标题用于版本标签
+  const sectionParts = summaryStore.content.split(/(?=^## )/m)
+  const sectionTitle = sectionParts[sectionIndex]?.split('\n')[0]?.replace(/^##\s*/, '').trim() || `章节${sectionIndex}`
+
+  let newContent = ''
+
+  streamRefineSection(
+    {
+      fullContent: summaryStore.content,
+      sectionIndex,
+      instruction,
+    },
+    (chunk) => {
+      newContent += chunk
+    },
+    () => {
+      const cleaned = cleanAIOutput(newContent)
+      summaryStore.replaceSection(sectionIndex, cleaned.endsWith('\n') ? cleaned : cleaned + '\n')
+      summaryStore.saveVersion(`修改：${sectionTitle}`)
+      refiningSection.value = -1
+      ElMessage.success(`「${sectionTitle}」修改完成`)
+    },
+    (err) => {
+      refiningSection.value = -1
+      ElMessage.error(`章节修改失败: ${err}`)
+    },
+  )
+}
+
+function openCustomRefine(sectionIndex: number) {
+  customRefineTarget.value = sectionIndex
+  customRefineInput.value = ''
+  customRefineDialog.value = true
+}
+
+function submitCustomRefine() {
+  const instruction = customRefineInput.value.trim()
+  if (!instruction) return
+  customRefineDialog.value = false
+  refineSection(customRefineTarget.value, instruction)
+}
+
+// ===== 大纲模式 =====
+function buildGenerateRequest() {
+  const analyses = projectStore.getSelectedAnalyses()
+  return {
+    projects: analyses,
+    feishuDocs: summaryStore.feishuDocs,
+    standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
+    dimensions: summaryStore.dimensions,
+    style: summaryStore.style,
+    docType: summaryStore.docType,
+    audience: summaryStore.audience,
+    tone: summaryStore.tone,
+    length: summaryStore.length,
+    language: summaryStore.language,
+    businessContext: summaryStore.businessContext || undefined,
+    roles: settingsStore.roles.length > 0 ? settingsStore.roles : undefined,
+  }
+}
+
+function generateOutline() {
+  outlineGenerating.value = true
+  outline.value = []
+  generateProgress.value = ''
+
+  streamGenerateOutline(
+    buildGenerateRequest(),
+    (result) => {
+      outline.value = result
+      outlineGenerating.value = false
+      generateProgress.value = ''
+      ElMessage.success('大纲生成完成，可编辑后生成全文')
+    },
+    (err) => {
+      outlineGenerating.value = false
+      generateProgress.value = ''
+      ElMessage.error(`大纲生成失败: ${err}`)
+    },
+    (progress) => {
+      generateProgress.value = progress
+    },
+  )
+}
+
+function generateFromOutline() {
+  // 过滤掉空标题和空要点
+  const validOutline = outline.value
+    .filter(item => item.title.trim())
+    .map(item => ({ ...item, points: item.points.filter(p => p.trim()) }))
+
+  if (validOutline.length === 0) {
+    ElMessage.warning('大纲为空，请至少添加一个章节')
+    return
+  }
+
+  summaryStore.generating = true
+  summaryStore.setContent('')
+  summaryStore.clearVersions()
+  summaryStore.chatMessages = []
+  generateProgress.value = ''
+
+  streamFromOutline(
+    { ...buildGenerateRequest(), outline: validOutline },
+    (chunk) => {
+      summaryStore.appendContent(chunk)
+    },
+    () => {
+      const cleaned = cleanAIOutput(summaryStore.content)
+      if (cleaned !== summaryStore.content) {
+        summaryStore.setContent(cleaned)
+      }
+      summaryStore.generating = false
+      generateProgress.value = ''
+      summaryStore.saveVersion('基于大纲生成')
+      outline.value = []
+      configCollapsed.value = true
+      ElMessage.success('总结生成完成!')
+    },
+    (err) => {
+      summaryStore.generating = false
+      generateProgress.value = ''
+      ElMessage.error(`生成失败: ${err}`)
+    },
+    (progress) => {
+      generateProgress.value = progress
+    },
+  )
+}
+
+function moveOutline(index: number, direction: number) {
+  const target = index + direction
+  if (target < 0 || target >= outline.value.length) return
+  const temp = outline.value[index]
+  outline.value[index] = outline.value[target]
+  outline.value[target] = temp
 }
 </script>
 
@@ -848,6 +1269,13 @@ function copyContent() {
   font-size: 12px;
   color: #909399;
   margin-top: 2px;
+}
+
+.compare-stats {
+  display: inline-block;
+  font-size: 12px;
+  color: #409eff;
+  margin-top: 4px;
 }
 
 .compare-card-btns {
@@ -958,6 +1386,23 @@ function copyContent() {
   color: #909399;
 }
 
+.writing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.writing-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.writing-label {
+  font-size: 12px;
+  color: #909399;
+}
+
 .selected-dims {
   display: flex;
   flex-wrap: wrap;
@@ -1029,6 +1474,31 @@ function copyContent() {
   align-items: center;
   justify-content: center;
   min-height: 400px;
+}
+
+.generating-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 12px;
+}
+
+.generating-spinner {
+  transform: scale(1.5);
+  margin-bottom: 8px;
+}
+
+.generating-phase {
+  font-size: 15px;
+  color: #303133;
+  font-weight: 500;
+}
+
+.generating-hint {
+  font-size: 12px;
+  color: #909399;
 }
 
 .markdown-preview {
@@ -1154,6 +1624,18 @@ function copyContent() {
 @keyframes refine-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+.preview-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.content-stats {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
 }
 
 .preview-header-btns {
@@ -1378,4 +1860,155 @@ function copyContent() {
 .diff-text {
   flex: 1;
 }
+
+/* ===== 章节分段渲染 + 悬浮操作栏 ===== */
+.sections-preview {
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.section-block {
+  position: relative;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.section-block:hover {
+  background: #fafbfc;
+}
+
+.section-toolbar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 10;
+}
+
+.section-content {
+  transition: opacity 0.3s;
+}
+
+.section-refining {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.section-loading-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  background: #f0f9ff;
+  border: 1px dashed #409eff;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.section-loading-text {
+  font-size: 13px;
+  color: #409eff;
+  font-weight: 500;
+}
+
+/* ===== 大纲编辑视图 ===== */
+.outline-card :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+}
+
+.outline-editor {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.outline-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.outline-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.outline-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: #409eff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.outline-title-input {
+  flex: 1;
+}
+
+.outline-points {
+  padding-left: 32px;
+}
+
+.outline-point {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.outline-point .el-input {
+  flex: 1;
+}
+
+.add-point-btn {
+  font-size: 12px;
+  color: #909399;
+}
+
+.add-section-btn {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #909399;
+}
+
+.outline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
+  margin-top: 16px;
+}
+
+/* ===== 自定义修改弹窗 ===== */
+.custom-refine-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.custom-refine-hint {
+  font-size: 13px;
+  color: #606266;
+  margin: 0;
+}
 </style>
+

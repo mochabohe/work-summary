@@ -157,8 +157,8 @@ export class ExportService {
 
     const pptx = new PptxGenJS()
     pptx.layout = 'LAYOUT_WIDE'
-    pptx.author = '年终总结生成器'
-    pptx.title = data.title || '年终工作总结'
+    pptx.author = '智能工作总结生成器'
+    pptx.title = data.title || '工作总结'
 
     for (const s of data.slides) {
       const slide = pptx.addSlide()
@@ -265,39 +265,6 @@ export class ExportService {
       runs.push({ text, options: { fontSize, fontFace: PPT_FONT, color, bold: false } })
     }
     return runs
-  }
-
-  /** 生成带圆点的要点列表项（支持 **加粗** 富文本） */
-  private makeBulletItems(bullets: string[], fontSize: number, color: string, spacing = 14) {
-    const items: Array<{ text: string | Array<{ text: string; options: Record<string, any> }>; options: Record<string, any> }> = []
-    for (const b of bullets) {
-      if (b.includes('**')) {
-        // 富文本：第一个 run 带 bullet 属性
-        const runs = this.parseRichTextRuns(b, fontSize, color)
-        if (runs.length > 0) {
-          runs[0].options.bullet = { code: '2022' }
-        }
-        // 最后一个 run 标记段落结束
-        runs[runs.length - 1].options.breakLine = true
-        runs[runs.length - 1].options.paraSpaceAfter = spacing
-        items.push(...runs as any)
-      } else {
-        // 纯文本
-        items.push({
-          text: b,
-          options: {
-            bullet: { code: '2022' },
-            fontSize,
-            fontFace: PPT_FONT,
-            color,
-            breakLine: true as const,
-            paraSpaceAfter: spacing,
-            lineSpacingMultiple: 1.2,
-          },
-        })
-      }
-    }
-    return items
   }
 
   /** 绘制左侧暗色侧栏 + 图标 + 标题（现代 PPT 版式） */
@@ -431,11 +398,10 @@ export class ExportService {
         slide.addText(m.description, { x: x + 0.1, y: cardY + 1.6, w: cardW - 0.2, h: 0.5, fontSize: 10, fontFace: PPT_FONT, color: '999999', align: 'center' })
       }
     })
-    // 下方补充要点
+    // 下方补充要点（卡片式）
     if (s.bullets && s.bullets.length > 0) {
       const bulletsY = cardY + cardH + 0.3
-      const items = this.makeBulletItems(s.bullets, 13, this.PC.bodyText, 10)
-      slide.addText(items as any, { x: cx + 0.2, y: bulletsY, w: cw - 0.4, h: 7.0 - bulletsY, valign: 'top' })
+      this.renderBulletCards(slide, s.bullets, cx, bulletsY, cw, 7.0)
     }
   }
 
@@ -452,8 +418,7 @@ export class ExportService {
       slide.addShape('rect' as any, { x: cx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: this.PC.cardBg } })
       slide.addText(s.left.title, { x: cx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: '黑体', color: 'FFFFFF', bold: true, valign: 'middle' })
       if (s.left.bullets && s.left.bullets.length > 0) {
-        const items = this.makeBulletItems(s.left.bullets, 11, this.PC.bodyText, 6)
-        slide.addText(items as any, { x: cx + 0.2, y: colY + 0.75, w: colW - 0.4, h: colH - 1.0, valign: 'top' })
+        this.renderColumnBulletCards(slide, s.left.bullets, cx + 0.12, colY + 0.72, colW - 0.24, colY + colH - 0.12, this.PC.accent)
       }
     }
     // 右栏
@@ -464,8 +429,40 @@ export class ExportService {
       slide.addShape('rect' as any, { x: rx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: this.PC.cardBg } })
       slide.addText(s.right.title, { x: rx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: '黑体', color: 'FFFFFF', bold: true, valign: 'middle' })
       if (s.right.bullets && s.right.bullets.length > 0) {
-        const items = this.makeBulletItems(s.right.bullets, 11, this.PC.bodyText, 6)
-        slide.addText(items as any, { x: rx + 0.2, y: colY + 0.75, w: colW - 0.4, h: colH - 1.0, valign: 'top' })
+        this.renderColumnBulletCards(slide, s.right.bullets, rx + 0.12, colY + 0.72, colW - 0.24, colY + colH - 0.12, this.PC.teal)
+      }
+    }
+  }
+
+  /** 栏内卡片式要点（用于 two-column 的左右栏，紧凑版） */
+  private renderColumnBulletCards(slide: any, bullets: string[], cx: number, startY: number, cw: number, endY: number, accentColor: string) {
+    const maxItems = Math.min(bullets.length, 6)
+    const gap = 0.08
+    const cardH = (endY - startY - gap * (maxItems - 1)) / maxItems
+    for (let i = 0; i < maxItems; i++) {
+      const y = startY + i * (cardH + gap)
+      // 卡片背景
+      slide.addShape('rect' as any, { x: cx + 0.05, y, w: cw - 0.05, h: cardH, fill: { color: 'FFFFFF' }, rectRadius: 0.04 })
+      // 左侧强调条
+      slide.addShape('rect' as any, { x: cx, y, w: 0.05, h: cardH, fill: { color: accentColor } })
+
+      const parts = this.parseBulletParts(bullets[i])
+      if (parts) {
+        const titleH = Math.min(cardH * 0.42, 0.35)
+        // 小标题
+        slide.addText(parts.title, {
+          x: cx + 0.15, y, w: cw - 0.25, h: titleH,
+          fontSize: 12, fontFace: '黑体', color: this.PC.darkBg, bold: true, valign: 'middle',
+        })
+        // 描述
+        const descRuns = this.parseRichTextRuns(parts.desc, 11, '555555')
+        slide.addText(descRuns as any, {
+          x: cx + 0.15, y: y + titleH, w: cw - 0.25, h: cardH - titleH,
+          valign: 'top',
+        })
+      } else {
+        const runs = this.parseRichTextRuns(bullets[i], 12, this.PC.bodyText)
+        slide.addText(runs as any, { x: cx + 0.15, y, w: cw - 0.25, h: cardH, valign: 'middle' })
       }
     }
   }
@@ -481,9 +478,9 @@ export class ExportService {
     const areaH = 6.5
     const cardH = rows === 1 ? areaH : (areaH - gap * (rows - 1)) / rows
     const startY = 0.5
-    const titleFs = rows >= 2 ? 12 : 14
-    const bulletFs = rows >= 2 ? 9 : 11
-    const bulletSp = rows >= 2 ? 3 : 5
+    const titleFs = 14
+    const bulletFs = rows >= 2 ? 12 : 13
+    const bulletSp = rows >= 2 ? 6 : 8
     cards.forEach((c, i) => {
       const col = i % cols
       const row = Math.floor(i / cols)
@@ -491,9 +488,9 @@ export class ExportService {
       const y = startY + row * (cardH + gap)
       slide.addShape('rect' as any, { x, y, w: cardW, h: cardH, fill: { color: this.PC.cardBg }, rectRadius: 0.1 })
       slide.addShape('rect' as any, { x, y, w: cardW, h: 0.05, fill: { color: this.PC.accent } })
-      slide.addText(c.title, { x: x + 0.12, y: y + 0.12, w: cardW - 0.24, h: 0.35, fontSize: titleFs, fontFace: '黑体', color: this.PC.darkBg, bold: true })
+      slide.addText(c.title, { x: x + 0.15, y: y + 0.15, w: cardW - 0.3, h: 0.45, fontSize: titleFs, fontFace: '黑体', color: this.PC.darkBg, bold: true, valign: 'middle' })
       if (c.bullets && c.bullets.length > 0) {
-        const plainItems = c.bullets.slice(0, rows >= 2 ? 3 : 5).map((b) => ({
+        const plainItems = c.bullets.slice(0, rows >= 2 ? 4 : 5).map((b) => ({
           text: b.replace(/\*\*/g, ''),
           options: {
             bullet: { code: '2022' },
@@ -502,9 +499,10 @@ export class ExportService {
             color: '555555',
             breakLine: true as const,
             paraSpaceAfter: bulletSp,
+            lineSpacingMultiple: 1.3,
           },
         }))
-        slide.addText(plainItems as any, { x: x + 0.15, y: y + 0.5, w: cardW - 0.3, h: cardH - 0.65, valign: 'top' })
+        slide.addText(plainItems as any, { x: x + 0.2, y: y + 0.6, w: cardW - 0.4, h: cardH - 0.8, valign: 'top' })
       }
     })
   }
@@ -658,7 +656,7 @@ export class ExportService {
                   doc.font(fb).fontSize(13).fillColor(C.white)
                   doc.text(s.left.title, cx + 14, colY + 10, { width: colW - 28 })
                   if (s.left.bullets?.length) {
-                    this.pdfBullets(doc, s.left.bullets, cx + 18, colY + 50, colW - 36, colH - 65, fn, fb, 11, C)
+                    this.pdfBulletCards(doc, s.left.bullets, cx + 8, colY + 46, colW - 16, colH - 56, fn, fb, 12, C)
                   }
                 }
                 if (s.right) {
@@ -671,7 +669,7 @@ export class ExportService {
                   doc.font(fb).fontSize(13).fillColor(C.white)
                   doc.text(s.right.title, rx + 14, colY + 10, { width: colW - 28 })
                   if (s.right.bullets?.length) {
-                    this.pdfBullets(doc, s.right.bullets, rx + 18, colY + 50, colW - 36, colH - 65, fn, fb, 11, C)
+                    this.pdfBulletCards(doc, s.right.bullets, rx + 8, colY + 46, colW - 16, colH - 56, fn, fb, 12, C)
                   }
                 }
               }
@@ -688,7 +686,7 @@ export class ExportService {
                 const gW = (cw - gGap * (cols - 1)) / cols
                 const gH = rows === 1 ? gAreaH : (gAreaH - gGap * (rows - 1)) / rows
                 const gStartY = 18
-                const tfs = rows >= 2 ? 12 : 14, bfs = rows >= 2 ? 9 : 11
+                const tfs = 14, bfs = rows >= 2 ? 12 : 13
                 cards.forEach((c, i) => {
                   const col = i % cols, row = Math.floor(i / cols)
                   const gx = cx + col * (gW + gGap), gy = gStartY + row * (gH + gGap)
@@ -697,15 +695,15 @@ export class ExportService {
                   gcG.stop(0, C.accent).stop(1, C.teal)
                   doc.rect(gx, gy, gW, 4).fill(gcG)
                   doc.font(fb).fontSize(tfs).fillColor(C.dark)
-                  doc.text(c.title, gx + 11, gy + 11, { width: gW - 22 })
+                  doc.text(c.title, gx + 14, gy + 14, { width: gW - 28 })
                   if (c.bullets?.length) {
-                    const maxB = rows >= 2 ? 3 : 5
-                    let by = gy + 38
+                    const maxB = rows >= 2 ? 4 : 5
+                    let by = gy + 44
                     for (const b of c.bullets.slice(0, maxB)) {
-                      doc.circle(gx + 19, by + bfs * 0.4, 2).fill(C.accent)
+                      doc.circle(gx + 22, by + bfs * 0.4, 2.5).fill(C.accent)
                       doc.font(fn).fontSize(bfs).fillColor(C.gray55)
-                      doc.text(b.replace(/\*\*/g, ''), gx + 30, by, { width: gW - 44 })
-                      by = doc.y + 3
+                      doc.text(b.replace(/\*\*/g, ''), gx + 34, by, { width: gW - 52, lineGap: 3 })
+                      by = doc.y + 6
                     }
                   }
                 })
@@ -900,25 +898,6 @@ export class ExportService {
     doc.rect(36, 76, 90, 3).fill(barGrad)
     doc.font(fb).fontSize(24).fillColor(C.white)
     doc.text(title, 36, 25, { width: W - 72 })
-  }
-
-  /** PDF 幻灯片：渲染要点列表（渐变圆点 + 支持 **加粗** 富文本） */
-  private pdfBullets(
-    doc: any, bullets: string[], x: number, y: number, w: number, maxH: number,
-    fn: string, fb: string, fontSize: number, C: any,
-  ) {
-    let curY = y
-    for (const b of bullets) {
-      if (curY > y + maxH) break
-      // 渐变圆点
-      const dotR = 3.5
-      const dotGrad = doc.linearGradient(x + 5 - dotR, curY + fontSize * 0.4 - dotR, x + 5 + dotR, curY + fontSize * 0.4 + dotR)
-      dotGrad.stop(0, C.accent).stop(1, C.teal)
-      doc.circle(x + 5, curY + fontSize * 0.4, dotR).fill(dotGrad)
-      doc.fillColor(C.text)
-      this.renderRichText(doc, b, fn, fb, fontSize, x + 16, curY, w - 16)
-      curY = doc.y + 9
-    }
   }
 
   /** 将 Markdown 内容转换为 Word 文档 */

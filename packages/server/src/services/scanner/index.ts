@@ -1,6 +1,7 @@
 import { FileWalker } from './file-walker.js'
 import { FileFilter } from './file-filter.js'
 import { ParserService } from '../parser/index.js'
+import simpleGit from 'simple-git'
 import type { ScanResult, ScanProgressEvent, ProjectInfo, DocumentContent } from '@work-summary/shared'
 
 export interface ScanOptions {
@@ -75,11 +76,18 @@ export class ScannerService {
       const techStack = await this.detectTechStack(project.path)
       const projectType = this.inferProjectType(techStack)
 
+      // 快速检测当前用户在该项目的 Git 提交数
+      let userCommitCount: number | undefined
+      if (project.hasGit && options.gitAuthor) {
+        userCommitCount = await this.quickCommitCount(project.path, options.gitAuthor, options.startDate, options.endDate)
+      }
+
       allProjects.push({
         ...project,
         fileCount,
         techStack,
         type: projectType,
+        userCommitCount,
       })
     }
 
@@ -223,6 +231,26 @@ export class ScannerService {
     }
 
     return techStack
+  }
+
+  /** 快速检测指定用户在项目中的 Git 提交数 */
+  private async quickCommitCount(
+    repoPath: string,
+    author: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<number> {
+    try {
+      const git = simpleGit(repoPath)
+      const args = ['log', '--oneline', '--author', author, '--all']
+      if (startDate) args.push('--since', startDate)
+      if (endDate) args.push('--until', endDate)
+      const output = await git.raw(args)
+      // 每行一条提交，统计非空行数
+      return output.trim() ? output.trim().split('\n').length : 0
+    } catch {
+      return 0
+    }
   }
 
   /** 推断项目类型 */

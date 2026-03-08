@@ -97,7 +97,7 @@ function parseAiJson(raw: string): any {
   } catch {
     try {
       return JSON.parse(repairTruncatedJson(jsonStr))
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -218,11 +218,11 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
-  // AI 流式生成总结
+  // AI 流式生成总结（单次调用，直接流式输出）
   app.post<{
     Body: GenerateRequest
   }>('/summary', async (request, reply) => {
-    const { projects, feishuDocs, standaloneDocuments, dimensions, style, customPrompt } = request.body
+    const params = request.body
 
     // 接管响应，阻止 Fastify 在 handler 返回后自动处理
     reply.hijack()
@@ -241,17 +241,11 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const promptBuilder = new PromptBuilder()
-      const messages = promptBuilder.buildSummaryPrompt({
-        projects,
-        feishuDocs,
-        standaloneDocuments,
-        dimensions,
-        style,
-        customPrompt,
-      })
-
       const llm = new LLMService()
 
+      reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: '正在生成总结...' })}\n\n`)
+
+      const messages = promptBuilder.buildSummaryPrompt(params)
       for await (const chunk of llm.streamChat(messages)) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
       }
@@ -329,6 +323,143 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
         content: instruction,
       })
 
+      for await (const chunk of llm.streamChat(messages)) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
+      }
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+    } catch (err) {
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: (err as Error).message })}\n\n`)
+    } finally {
+      clearInterval(heartbeat)
+      reply.raw.end()
+    }
+  })
+
+  // 章节级修改（只重写一个章节）
+  app.post<{
+    Body: { fullContent: string; sectionIndex: number; instruction: string }
+  }>('/refine-section', async (request, reply) => {
+    const { fullContent, sectionIndex, instruction } = request.body
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(': heartbeat\n\n') } catch { clearInterval(heartbeat) }
+    }, 15000)
+
+    try {
+      const promptBuilder = new PromptBuilder()
+      const llm = new LLMService()
+
+      // 按 ## 拆分为章节
+      const sections = fullContent.split(/(?=^## )/m)
+      if (sectionIndex < 0 || sectionIndex >= sections.length) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: '章节索引越界' })}\n\n`)
+        return
+      }
+
+      const targetSection = sections[sectionIndex]
+      const otherTitles = sections
+        .filter((_, i) => i !== sectionIndex)
+        .map(s => s.split('\n')[0].replace(/^##\s*/, '').trim())
+        .filter(Boolean)
+
+      const messages = promptBuilder.buildSectionRefinePrompt(targetSection, instruction, otherTitles)
+      for await (const chunk of llm.streamChat(messages)) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
+      }
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+    } catch (err) {
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: (err as Error).message })}\n\n`)
+    } finally {
+      clearInterval(heartbeat)
+      reply.raw.end()
+    }
+  })
+
+  // 生成结构化大纲（JSON）
+  app.post<{
+    Body: GenerateRequest
+  }>('/outline', async (request, reply) => {
+    const params = request.body
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(': heartbeat\n\n') } catch { clearInterval(heartbeat) }
+    }, 15000)
+
+    try {
+      const promptBuilder = new PromptBuilder()
+      const llm = new LLMService()
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: '正在生成大纲...' })}\n\n`)
+
+      const messages = promptBuilder.buildOutlineJsonPrompt(params)
+      let raw = ''
+      for await (const chunk of llm.streamChat(messages, undefined, 2048)) {
+        raw += chunk
+      }
+
+      // 解析 JSON 大纲
+      const outline = parseAiJson(raw)
+      if (Array.isArray(outline) && outline.length > 0) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'done', outline })}\n\n`)
+      } else {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: '大纲解析失败，请重试' })}\n\n`)
+      }
+    } catch (err) {
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: (err as Error).message })}\n\n`)
+    } finally {
+      clearInterval(heartbeat)
+      reply.raw.end()
+    }
+  })
+
+  // 基于大纲生成全文
+  app.post<{
+    Body: GenerateRequest & { outline: { title: string; points: string[] }[] }
+  }>('/from-outline', async (request, reply) => {
+    const { outline, ...params } = request.body
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(': heartbeat\n\n') } catch { clearInterval(heartbeat) }
+    }, 15000)
+
+    try {
+      const promptBuilder = new PromptBuilder()
+      const llm = new LLMService()
+
+      reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: '正在基于大纲生成全文...' })}\n\n`)
+
+      // 将 outline JSON 转为 Markdown 提纲
+      const outlineMarkdown = outline.map(item =>
+        `## ${item.title}\n${item.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}`,
+      ).join('\n\n')
+
+      const messages = promptBuilder.buildFromOutlinePrompt(params as GenerateRequest, outlineMarkdown)
       for await (const chunk of llm.streamChat(messages)) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
       }

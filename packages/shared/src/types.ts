@@ -15,6 +15,8 @@ export interface ProjectInfo {
   fileCount: number
   /** 是否有 Git 仓库 */
   hasGit: boolean
+  /** 当前用户在该项目的 Git 提交数（扫描阶段快速检测） */
+  userCommitCount?: number
   /** 项目描述 (来自 package.json 等) */
   description?: string
 }
@@ -99,6 +101,30 @@ export interface SummaryDimension {
   description: string
 }
 
+/** 总结文档类型 */
+export type SummaryDocType =
+  | 'yearly-summary'
+  | 'quarterly-review'
+  | 'monthly-report'
+  | 'promotion-report'
+  | 'project-retro'
+  | 'resume'
+
+/** 总结风格 */
+export type SummaryStyle = 'formal' | 'semi-formal'
+
+/** 目标读者 */
+export type SummaryAudience = 'manager' | 'tech-lead' | 'cross-team' | 'self-archive'
+
+/** 语气偏好 */
+export type SummaryTone = 'professional' | 'concise' | 'result-driven'
+
+/** 输出长度 */
+export type SummaryLength = 'short' | 'medium' | 'long'
+
+/** 输出语言 */
+export type SummaryLanguage = 'zh-CN' | 'en-US'
+
 /** 生成请求参数 */
 export interface GenerateRequest {
   /** 选中的项目分析数据 */
@@ -110,9 +136,23 @@ export interface GenerateRequest {
   /** 选中的总结维度 */
   dimensions: string[]
   /** 总结风格 */
-  style: 'formal' | 'semi-formal'
+  style: SummaryStyle
+  /** 文档类型 */
+  docType?: SummaryDocType
+  /** 目标读者 */
+  audience?: SummaryAudience
+  /** 语气偏好 */
+  tone?: SummaryTone
+  /** 输出长度 */
+  length?: SummaryLength
+  /** 输出语言 */
+  language?: SummaryLanguage
   /** 用户自定义要求 */
   customPrompt?: string
+  /** 业务背景（描述核心业务目标或面临的挑战） */
+  businessContext?: string
+  /** 用户角色（如：前端开发、技术负责人） */
+  roles?: string[]
 }
 
 /** 生成的总结 */

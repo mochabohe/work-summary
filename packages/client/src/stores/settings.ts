@@ -11,6 +11,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const now = new Date()
   const startDate = ref<string>(defaults.startDate || `${now.getFullYear()}-01`)
   const endDate = ref<string>(defaults.endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  // 用户角色（支持多选，含自定义）
+  const roles = ref<string[]>(defaults.roles || [])
 
   // 自动保存到 localStorage
   function save() {
@@ -18,10 +20,11 @@ export const useSettingsStore = defineStore('settings', () => {
       gitAuthor: gitAuthor.value,
       startDate: startDate.value,
       endDate: endDate.value,
+      roles: roles.value,
     }))
   }
 
-  watch([gitAuthor, startDate, endDate], save, { deep: true })
+  watch([gitAuthor, startDate, endDate, roles], save, { deep: true })
 
   /** 获取 Git 查询用的开始日期（YYYY-MM-DD） */
   function getGitSince(): string {
@@ -43,6 +46,7 @@ export const useSettingsStore = defineStore('settings', () => {
     gitAuthor,
     startDate,
     endDate,
+    roles,
     getGitSince,
     getGitUntil,
     isConfigured,

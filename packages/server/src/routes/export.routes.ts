@@ -102,7 +102,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ success: false, error: '缺少 slidesData 参数' })
     }
     if (Array.isArray(slidesData)) {
-      slidesData = { title: '年终工作总结', slides: slidesData } as PptData
+      slidesData = { title: '工作总结', slides: slidesData } as PptData
     }
     if (!slidesData.slides || !Array.isArray(slidesData.slides)) {
       app.log.error({ slidesData: JSON.stringify(slidesData).substring(0, 500) }, 'PPTX slidesData 结构无效')

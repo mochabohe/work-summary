@@ -44,6 +44,20 @@
           <span>导出</span>
         </template>
 
+        <div class="export-filename">
+          <label class="export-filename-label">文件名</label>
+          <el-input
+            v-model="exportFilename"
+            placeholder="例如：工作总结、Q3 季度总结"
+            size="default"
+            style="width: 280px;"
+          >
+            <template #suffix>
+              <span class="filename-suffix">.md / .docx</span>
+            </template>
+          </el-input>
+        </div>
+
         <div class="export-actions">
           <el-button
             type="primary"
@@ -96,7 +110,7 @@
           <el-form-item label="封面标题">
             <el-input
               v-model="pptTitle"
-              placeholder="例如：年终工作总结、Q3 季度总结、员工述职报告"
+              placeholder="例如：工作总结、Q3 季度总结、员工述职报告"
               size="large"
             />
           </el-form-item>
@@ -198,8 +212,8 @@
                     <div v-if="m.description" class="metric-desc">{{ m.description }}</div>
                   </div>
                 </div>
-                <div class="bullet-cards" v-if="slide.bullets && slide.bullets.length">
-                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card">
+                <div class="bullet-cards" :class="{ 'bullets-compact': slide.bullets && slide.bullets.length > 4 }" v-if="slide.bullets && slide.bullets.length">
+                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card" :class="{ sm: slide.bullets.length > 4 }">
                     <div v-html="renderBulletContent(b)"></div>
                   </div>
                 </div>
@@ -217,8 +231,8 @@
               </div>
               <div class="slide-main">
                 <p v-if="slide.description" class="slide-desc">{{ slide.description }}</p>
-                <div class="bullet-cards" v-if="slide.bullets">
-                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card">
+                <div class="bullet-cards" :class="{ 'bullets-compact': slide.bullets && slide.bullets.length > 4 }" v-if="slide.bullets">
+                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card" :class="{ sm: slide.bullets.length > 4 }">
                     <div v-html="renderBulletContent(b)"></div>
                   </div>
                 </div>
@@ -283,8 +297,8 @@
                 <div class="sidebar-line"></div>
               </div>
               <div class="slide-main">
-                <div class="bullet-cards" v-if="slide.bullets">
-                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card">
+                <div class="bullet-cards" :class="{ 'bullets-compact': slide.bullets && slide.bullets.length > 4 }" v-if="slide.bullets">
+                  <div v-for="(b, bi) in slide.bullets" :key="bi" class="bullet-card" :class="{ sm: slide.bullets && slide.bullets.length > 4 }">
                     <div v-html="renderBulletContent(b)"></div>
                   </div>
                 </div>
@@ -517,6 +531,9 @@ function copyContent() {
   ElMessage.success('已复制到剪贴板')
 }
 
+// 导出文件名
+const exportFilename = ref(`工作总结-${new Date().getFullYear()}`)
+
 // PPT 导出相关
 const pptLoadingVisible = ref(false)
 const pptPreviewVisible = ref(false)
@@ -527,11 +544,11 @@ const pptStreamText = ref('')
 const pptStreamBoxRef = ref<HTMLElement | null>(null)
 const pptStatus = ref('AI 正在生成演示文稿结构...')
 const pptTitleVisible = ref(false)
-const pptTitle = ref('年终工作总结')
+const pptTitle = ref('工作总结')
 let cancelPptFn: (() => void) | null = null
 
 function showPptTitleDialog() {
-  pptTitle.value = '年终工作总结'
+  pptTitle.value = '工作总结'
   pptTitleVisible.value = true
 }
 
@@ -594,7 +611,7 @@ async function confirmPptDownload() {
   if (!slidesData.value) return
   pptDownloading.value = true
   try {
-    const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
+    const filename = `${pptTitle.value || '工作总结'}-${new Date().getFullYear()}`
     await downloadPptx(slidesData.value, filename, getCustomColors())
     ElMessage.success('PPTX 已下载')
   } catch (err: any) {
@@ -608,7 +625,7 @@ async function confirmPdfSlidesDownload() {
   if (!slidesData.value) return
   pdfSlidesDownloading.value = true
   try {
-    const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
+    const filename = `${pptTitle.value || '工作总结'}-${new Date().getFullYear()}`
     await downloadPdfSlides(slidesData.value, filename, getCustomColors())
     ElMessage.success('PDF 已下载')
   } catch (err: any) {
@@ -622,7 +639,7 @@ async function handleExport(format: string) {
   exporting.value = format
 
   try {
-    const filename = `年终工作总结-${new Date().getFullYear()}`
+    const filename = exportFilename.value.trim() || `工作总结-${new Date().getFullYear()}`
 
     switch (format) {
       case 'markdown':
@@ -705,6 +722,24 @@ async function handleExport(format: string) {
 
 .export-card {
   margin-top: 20px;
+}
+
+.export-filename {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.export-filename-label {
+  font-size: 14px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.filename-suffix {
+  font-size: 12px;
+  color: #c0c4cc;
 }
 
 .export-actions {
@@ -1071,8 +1106,21 @@ async function handleExport(format: string) {
   box-shadow: 2px 0 8px rgb(var(--h-rgb) / 0.15);
 }
 .bullet-card.sm {
-  padding: 7px 12px 7px 15px;
+  padding: 6px 12px 6px 15px;
   font-size: 12px;
+  line-height: 1.5;
+}
+.bullets-compact {
+  gap: 4px;
+}
+.bullets-compact .bullet-card.sm :deep(.bc-title) {
+  font-size: 12px;
+  margin-bottom: 2px;
+  padding-bottom: 3px;
+}
+.bullets-compact .bullet-card.sm :deep(.bc-desc) {
+  font-size: 11px;
+  line-height: 1.5;
 }
 .bullet-card :deep(strong) { color: var(--t, #1B2A4A); font-weight: 700; }
 

@@ -37,7 +37,11 @@
       "Read(//c/Users/25198/Desktop/**)",
       "Bash(npm run build:*)",
       "Bash(Select-String -Pattern \"prompt-builder|generate.routes\")",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm --filter @work-summary/shared build:*)",
+      "Bash(set NODE_OPTIONS=--max-old-space-size=4096)",
+      "Bash(curl:*)"
     ]
   }
 }

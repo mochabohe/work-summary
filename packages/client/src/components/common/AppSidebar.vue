@@ -2,7 +2,7 @@
   <div class="sidebar">
     <div class="sidebar-logo">
       <h2>WorkSummary</h2>
-      <span class="subtitle">年终总结生成器</span>
+      <span class="subtitle">智能总结生成器</span>
     </div>
 
     <el-menu
@@ -28,7 +28,7 @@
       </el-menu-item>
       <el-menu-item index="/feishu">
         <el-icon><ChatDotSquare /></el-icon>
-        <span>补充文档</span>
+        <span>补充材料</span>
       </el-menu-item>
       <el-menu-item index="/generate">
         <el-icon><MagicStick /></el-icon>

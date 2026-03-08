@@ -1,10 +1,10 @@
 <template>
   <div class="home-view">
     <div class="hero">
-      <h1>年终工作总结生成器</h1>
+      <h1>智能工作总结生成器</h1>
       <p class="hero-desc">
         输入你的工作文件夹路径，自动扫描项目代码、文档，结合 Git 贡献分析和 AI 智能总结，
-        一键生成专业的年终工作总结。
+        一键生成专业的工作总结。
       </p>
 
       <div class="quick-start">
@@ -33,9 +33,9 @@
         <el-step title="配置设置" description="配置 DeepSeek API Key、Git 用户名等基础信息" />
         <el-step title="扫描文件" description="输入工作文件夹路径，自动识别项目并分析文件结构" />
         <el-step title="查看分析" description="预览每个项目的技术栈、Git 贡献统计、文档摘要" />
-        <el-step title="补充文档" description="通过飞书 API 或手动粘贴补充额外的工作文档" />
-        <el-step title="AI 生成" description="选择总结维度，AI 自动生成结构化的年终工作总结" />
-        <el-step title="预览导出" description="在线预览和编辑，支持导出 Markdown、Word、PDF" />
+        <el-step title="补充材料" description="手动粘贴会议纪要、周报等补充材料，辅助 AI 生成更全面的总结" />
+        <el-step title="AI 生成" description="选择总结维度，AI 自动生成结构化的工作总结" />
+        <el-step title="预览导出" description="在线预览和编辑，支持导出 Markdown、Word、PDF、PPT" />
       </el-steps>
     </div>
   </div>
@@ -60,7 +60,7 @@ const features = [
   {
     icon: '🤖',
     title: 'AI 智能总结',
-    desc: '基于 DeepSeek 大模型，按维度生成专业、有力度的年终总结，支持流式输出和局部润色。',
+    desc: '基于 DeepSeek 大模型，按维度生成专业、有力度的工作总结，支持流式输出和局部润色。',
   },
   {
     icon: '📄',
@@ -69,13 +69,13 @@ const features = [
   },
   {
     icon: '📋',
-    title: '补充文档',
-    desc: '支持粘贴飞书文档、会议纪要、周报等补充内容，可添加多份文档辅助生成。',
+    title: '补充材料',
+    desc: '支持粘贴会议纪要、周报等补充材料，可添加多份文档辅助 AI 生成更全面的总结。',
   },
   {
     icon: '📥',
     title: '多格式导出',
-    desc: '生成的总结支持 Markdown、Word、PDF 多种格式导出，满足不同提交需求。',
+    desc: '生成的总结支持 Markdown、Word、PDF、PPT 多种格式导出，满足不同提交需求。',
   },
 ]
 </script>
