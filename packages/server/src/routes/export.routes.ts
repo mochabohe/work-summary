@@ -62,6 +62,35 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
+  // 导出 PDF（从幻灯片 JSON 结构生成，与 PPTX 视觉一致）
+  app.post<{
+    Body: { slidesData: PptData; filename?: string }
+  }>('/pdf-slides', { config: { rawBody: false }, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+    let { slidesData, filename = 'work-summary' } = request.body
+
+    if (!slidesData) {
+      return reply.status(400).send({ success: false, error: '缺少 slidesData 参数' })
+    }
+    if (Array.isArray(slidesData)) {
+      slidesData = { title: '工作总结', slides: slidesData } as PptData
+    }
+    if (!slidesData.slides || !Array.isArray(slidesData.slides)) {
+      return reply.status(400).send({ success: false, error: 'slidesData.slides 不是有效数组' })
+    }
+
+    try {
+      const exportService = new ExportService()
+      const buffer = await exportService.toPdfSlides(slidesData)
+
+      reply.header('Content-Type', 'application/pdf')
+      reply.header('Content-Disposition', safeContentDisposition(filename, 'pdf'))
+      return reply.send(buffer)
+    } catch (err) {
+      app.log.error(err, 'PDF 幻灯片导出失败')
+      return reply.status(500).send({ success: false, error: (err as Error).message })
+    }
+  })
+
   // 导出 PPTX（从幻灯片 JSON 结构生成）
   app.post<{
     Body: { slidesData: PptData; filename?: string }

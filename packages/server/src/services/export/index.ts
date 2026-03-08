@@ -325,6 +325,238 @@ export class ExportService {
       })
     }
   }
+  /** 将幻灯片 JSON 渲染为横屏 PDF（与 PPT 视觉完全一致） */
+  async toPdfSlides(data: PptData): Promise<Buffer> {
+    if (!data || !Array.isArray(data.slides)) {
+      throw new Error('无效的幻灯片数据')
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        // 16:9 横屏，与 PPTX LAYOUT_WIDE 一致 (13.33" × 7.5" = 960 × 540 pt)
+        const W = 960, H = 540
+        const doc = new PDFDocument({
+          size: [W, H],
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          bufferPages: true,
+          info: { Title: data.title || '工作总结', Author: 'WorkSummary' },
+        })
+
+        const chunks: Buffer[] = []
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+        doc.on('end', () => resolve(Buffer.concat(chunks)))
+        doc.on('error', reject)
+
+        const fonts = this.findChineseFonts()
+        if (fonts.normal) doc.registerFont('CN', fonts.normal)
+        if (fonts.bold) doc.registerFont('CN-Bold', fonts.bold)
+        const fn = fonts.normal ? 'CN' : 'Helvetica'
+        const fb = fonts.bold ? 'CN-Bold' : 'Helvetica-Bold'
+
+        // 配色与 PPT 完全一致
+        const C = {
+          dark: '#1B2A4A', darkEnd: '#0f1c36',
+          accent: '#4472C4', teal: '#2CB9C5',
+          white: '#FFFFFF', text: '#333333',
+          subtitle: '#B0BEC5', gray55: '#555555', gray99: '#999999',
+          cardBg: '#F8FAFC',
+        }
+
+        let isFirst = true
+        for (const s of data.slides) {
+          if (!isFirst) doc.addPage()
+          isFirst = false
+
+          switch (s.type) {
+            case 'title': case 'end':
+              this.pdfDarkBg(doc, W, H, C)
+              doc.font(fb).fontSize(36).fillColor(C.white)
+              doc.text(s.title, 36, H / 2 - 50, { width: W - 72, align: 'center' })
+              if (s.subtitle) {
+                doc.font(fn).fontSize(20).fillColor(C.subtitle)
+                doc.text(s.subtitle, 36, H / 2 + 20, { width: W - 72, align: 'center' })
+              }
+              break
+
+            case 'section':
+              this.pdfDarkBg(doc, W, H, C)
+              doc.font(fb).fontSize(32).fillColor(C.white)
+              doc.text(s.title, 36, H / 2 - 30, { width: W - 72, align: 'center' })
+              doc.rect(W / 2 - 30, H / 2 + 20, 60, 4).fill(C.accent)
+              break
+
+            case 'content':
+              this.pdfHeaderBar(doc, s.title, W, fb, C)
+              {
+                let cy = 108
+                if (s.description) {
+                  doc.font(fn).fontSize(14).fillColor('#666666')
+                  doc.text(s.description, 43, 94, { width: W - 86 })
+                  cy = doc.y + 10
+                }
+                if (s.bullets?.length) {
+                  this.pdfBullets(doc, s.bullets, 58, cy, W - 116, H - cy - 22, fn, fb, 16, C)
+                }
+              }
+              break
+
+            case 'metrics':
+              this.pdfHeaderBar(doc, s.title, W, fb, C)
+              {
+                const metrics = s.metrics || []
+                const cnt = Math.max(metrics.length, 1)
+                const gap = 22, totalW = W - 72
+                const cW = (totalW - gap * (cnt - 1)) / cnt
+                const cH = 187, cY = 108
+                metrics.forEach((m, i) => {
+                  const mx = 36 + i * (cW + gap)
+                  doc.roundedRect(mx, cY, cW, cH, 7).fill(C.cardBg)
+                  doc.rect(mx, cY, cW, 6).fill(C.teal)
+                  doc.font(fb).fontSize(36).fillColor(C.teal)
+                  doc.text(m.value, mx, cY + 22, { width: cW, align: 'center' })
+                  doc.font(fb).fontSize(14).fillColor(C.gray55)
+                  doc.text(m.label, mx, cY + 94, { width: cW, align: 'center' })
+                  if (m.description) {
+                    doc.font(fn).fontSize(11).fillColor(C.gray99)
+                    doc.text(m.description, mx + 11, cY + 130, { width: cW - 22, align: 'center' })
+                  }
+                })
+                if (s.bullets?.length) {
+                  this.pdfBullets(doc, s.bullets, 58, cY + cH + 29, W - 116, H - (cY + cH + 29) - 22, fn, fb, 15, C)
+                }
+              }
+              break
+
+            case 'two-column':
+              this.pdfHeaderBar(doc, s.title, W, fb, C)
+              {
+                const colW = 425, colH = 410, colY = 101
+                if (s.left) {
+                  const lx = 36
+                  doc.roundedRect(lx, colY, colW, colH, 7).fill(C.cardBg)
+                  doc.rect(lx, colY, colW, 4).fill(C.accent)
+                  doc.font(fb).fontSize(16).fillColor(C.accent)
+                  doc.text(s.left.title, lx + 22, colY + 14, { width: colW - 44 })
+                  if (s.left.bullets?.length) {
+                    this.pdfBullets(doc, s.left.bullets, lx + 29, colY + 54, colW - 58, colH - 72, fn, fb, 12, C)
+                  }
+                }
+                if (s.right) {
+                  const rx = 499
+                  doc.roundedRect(rx, colY, colW, colH, 7).fill(C.cardBg)
+                  doc.rect(rx, colY, colW, 4).fill(C.teal)
+                  doc.font(fb).fontSize(16).fillColor(C.teal)
+                  doc.text(s.right.title, rx + 22, colY + 14, { width: colW - 44 })
+                  if (s.right.bullets?.length) {
+                    this.pdfBullets(doc, s.right.bullets, rx + 29, colY + 54, colW - 58, colH - 72, fn, fb, 12, C)
+                  }
+                }
+              }
+              break
+
+            case 'grid':
+              this.pdfHeaderBar(doc, s.title, W, fb, C)
+              {
+                const cards = s.cards || []
+                const cols = cards.length <= 2 ? cards.length : cards.length <= 4 ? 2 : 3
+                const rows = Math.ceil(cards.length / cols)
+                const gap = 18, areaW = W - 72, areaH = 410
+                const gW = (areaW - gap * (cols - 1)) / cols
+                const gH = rows === 1 ? areaH : (areaH - gap * (rows - 1)) / rows
+                const startY = 101
+                const tfs = rows >= 2 ? 13 : 15, bfs = rows >= 2 ? 10 : 12
+                cards.forEach((c, i) => {
+                  const col = i % cols, row = Math.floor(i / cols)
+                  const gx = 36 + col * (gW + gap), gy = startY + row * (gH + gap)
+                  doc.roundedRect(gx, gy, gW, gH, 7).fill(C.cardBg)
+                  doc.rect(gx, gy, gW, 4).fill(C.accent)
+                  doc.font(fb).fontSize(tfs).fillColor(C.dark)
+                  doc.text(c.title, gx + 11, gy + 11, { width: gW - 22 })
+                  if (c.bullets?.length) {
+                    const maxB = rows >= 2 ? 3 : 5
+                    let by = gy + 43
+                    for (const b of c.bullets.slice(0, maxB)) {
+                      doc.circle(gx + 19, by + bfs * 0.4, 2).fill(C.accent)
+                      doc.font(fn).fontSize(bfs).fillColor(C.gray55)
+                      doc.text(b.replace(/\*\*/g, ''), gx + 30, by, { width: gW - 44 })
+                      by = doc.y + 4
+                    }
+                  }
+                })
+              }
+              break
+
+            case 'summary':
+              this.pdfHeaderBar(doc, s.title, W, fb, C)
+              if (s.bullets?.length) {
+                this.pdfBullets(doc, s.bullets, 58, 108, W - 116, 274, fn, fb, 16, C)
+              }
+              {
+                const tags = s.tags || []
+                if (tags.length > 0) {
+                  const tagColors = [C.accent, C.teal, '#E67E22', '#8E44AD', '#E74C3C', '#27AE60']
+                  const tGap = 18, maxTW = W - 72
+                  const tW = Math.min(180, (maxTW - tGap * (tags.length - 1)) / tags.length)
+                  const totalTW = tags.length * tW + (tags.length - 1) * tGap
+                  const sx = (W - totalTW) / 2
+                  const tY = s.bullets?.length ? 418 : 252
+                  tags.forEach((tag, i) => {
+                    const tx = sx + i * (tW + tGap)
+                    doc.roundedRect(tx, tY, tW, 43, 21.5).fill(tagColors[i % tagColors.length])
+                    doc.font(fb).fontSize(13).fillColor(C.white)
+                    doc.text(tag, tx, tY + 12, { width: tW, align: 'center' })
+                  })
+                }
+              }
+              break
+          }
+        }
+
+        // 页码
+        const range = doc.bufferedPageRange()
+        const total = range.count
+        for (let i = 0; i < total; i++) {
+          doc.switchToPage(range.start + i)
+          doc.font(fn).fontSize(8).fillColor(C.gray99)
+          doc.text(`${i + 1} / ${total}`, 0, H - 20, { width: W, align: 'center' })
+        }
+
+        doc.end()
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  /** PDF 幻灯片：渐变深色背景 */
+  private pdfDarkBg(doc: any, W: number, H: number, C: any) {
+    const grad = doc.linearGradient(0, 0, W, H)
+    grad.stop(0, C.dark).stop(1, C.darkEnd)
+    doc.rect(0, 0, W, H).fill(grad)
+  }
+
+  /** PDF 幻灯片：深蓝标题栏 */
+  private pdfHeaderBar(doc: any, title: string, W: number, fb: string, C: any) {
+    doc.rect(0, 0, W, 79).fill(C.dark)
+    doc.font(fb).fontSize(24).fillColor(C.white)
+    doc.text(title, 36, 25, { width: W - 72 })
+  }
+
+  /** PDF 幻灯片：渲染要点列表（支持 **加粗** 富文本） */
+  private pdfBullets(
+    doc: any, bullets: string[], x: number, y: number, w: number, maxH: number,
+    fn: string, fb: string, fontSize: number, C: any,
+  ) {
+    let curY = y
+    for (const b of bullets) {
+      if (curY > y + maxH) break
+      doc.circle(x + 5, curY + fontSize * 0.4, 3).fill(C.accent)
+      doc.fillColor(C.text)
+      this.renderRichText(doc, b, fn, fb, fontSize, x + 16, curY, w - 16)
+      curY = doc.y + 8
+    }
+  }
+
   /** 将 Markdown 内容转换为 Word 文档 */
   async toDocx(markdownContent: string): Promise<Buffer> {
     const paragraphs = this.markdownToParagraphs(markdownContent)
@@ -346,15 +578,16 @@ export class ExportService {
     return Buffer.from(result as ArrayBuffer)
   }
 
-  /** 将 Markdown 内容转换为 PDF（使用 pdfkit，纯 JS 无需浏览器） */
+  /** 将 Markdown 内容转换为 PDF（使用 pdfkit，专业排版，配色与 PPT 一致） */
   async toPdf(markdownContent: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({
           size: 'A4',
-          margins: { top: 60, bottom: 60, left: 50, right: 50 },
+          margins: { top: 56, bottom: 56, left: 56, right: 56 },
+          bufferPages: true,
           info: {
-            Title: '年终工作总结',
+            Title: '工作总结',
             Author: 'WorkSummary',
           },
         })
@@ -372,61 +605,132 @@ export class ExportService {
         const fontNormal = fonts.normal ? 'CN' : 'Helvetica'
         const fontBold = fonts.bold ? 'CN-Bold' : 'Helvetica-Bold'
 
-        doc.font(fontNormal)
+        // 主题色（与 PPT 保持一致）
+        const C = {
+          dark: '#1B2A4A',
+          accent: '#4472C4',
+          teal: '#2CB9C5',
+          text: '#333333',
+          gray: '#666666',
+          lightBg: '#F8FAFC',
+        }
+
+        const pw = doc.page.width
+        const ml = doc.page.margins.left
+        const cw = pw - ml - doc.page.margins.right
+
+        doc.font(fontNormal).fillColor(C.text)
 
         const lines = markdownContent.split('\n')
+        let isFirstSection = true
 
         for (const line of lines) {
           const trimmed = line.trim()
-
           if (!trimmed) {
             doc.moveDown(0.3)
             continue
           }
 
-          // 一级标题
-          if (trimmed.startsWith('# ')) {
-            doc.moveDown(0.5)
-            const title = this.stripMarkdown(trimmed.replace(/^#\s+/, ''))
-            doc.font(fontBold).fontSize(22).text(title, { underline: true })
-            doc.font(fontNormal)
-            doc.moveDown(0.3)
+          // 自动分页检测
+          if (doc.y > doc.page.height - doc.page.margins.bottom - 50) {
+            doc.addPage()
           }
-          // 二级标题
-          else if (trimmed.startsWith('## ')) {
-            doc.moveDown(0.5)
+
+          // ## 二级标题 → 带强调色左边栏的区块标题
+          if (trimmed.startsWith('## ')) {
             const title = this.stripMarkdown(trimmed.replace(/^##\s+/, ''))
-            doc.font(fontBold).fontSize(18).text(title)
-            doc.font(fontNormal)
-            doc.moveDown(0.2)
+            if (!isFirstSection) {
+              doc.moveDown(0.8)
+            }
+            isFirstSection = false
+
+            if (doc.y > doc.page.height - doc.page.margins.bottom - 80) {
+              doc.addPage()
+            }
+
+            const y = doc.y
+            const h = 32
+            // 左侧强调色竖条
+            doc.rect(ml, y, 4, h).fill(C.accent)
+            // 浅色背景
+            doc.rect(ml + 4, y, cw - 4, h).fill(C.lightBg)
+            doc.font(fontBold).fontSize(15).fillColor(C.dark)
+            doc.text(title, ml + 16, y + 7, { width: cw - 24 })
+            doc.y = y + h + 12
+            doc.fillColor(C.text).font(fontNormal)
           }
-          // 三级标题
+          // # 一级标题
+          else if (trimmed.startsWith('# ')) {
+            const title = this.stripMarkdown(trimmed.replace(/^#\s+/, ''))
+            doc.moveDown(0.5)
+            doc.font(fontBold).fontSize(22).fillColor(C.dark)
+            doc.text(title, { align: 'center' })
+            // 标题下方装饰线
+            const lineY = doc.y + 4
+            doc.rect(pw / 2 - 30, lineY, 60, 3).fill(C.accent)
+            doc.y = lineY + 12
+            doc.fillColor(C.text).font(fontNormal)
+            isFirstSection = false
+          }
+          // ### 三级标题
           else if (trimmed.startsWith('### ')) {
             doc.moveDown(0.3)
             const title = this.stripMarkdown(trimmed.replace(/^###\s+/, ''))
-            doc.font(fontBold).fontSize(15).text(title)
-            doc.font(fontNormal)
-            doc.moveDown(0.1)
+            doc.font(fontBold).fontSize(12).fillColor(C.accent)
+            doc.text(title, ml + 10)
+            doc.fillColor(C.text).font(fontNormal)
+            doc.moveDown(0.15)
           }
-          // 列表项
+          // 序号列表: 1. **加粗小标题**：描述
+          else if (/^\d+\.\s/.test(trimmed)) {
+            const text = trimmed.replace(/^\d+\.\s+/, '')
+            const numMatch = trimmed.match(/^(\d+)\./)
+            const num = numMatch ? numMatch[1] : '1'
+            const startY = doc.y
+
+            // 绘制序号圆形指示器
+            const cx = ml + 10
+            const cy = startY + 7
+            doc.circle(cx, cy, 8).fill(C.accent)
+            doc.font(fontBold).fontSize(9).fillColor('#FFFFFF')
+            doc.text(num, cx - 5, cy - 5, { width: 10, align: 'center', lineBreak: false })
+
+            // 内容文本（从序号右侧开始）
+            doc.fillColor(C.text)
+            this.renderRichText(doc, text, fontNormal, fontBold, 11, ml + 28, startY, cw - 28)
+            doc.moveDown(0.25)
+          }
+          // 无序列表
           else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
             const text = trimmed.replace(/^[-*]\s+/, '')
-            doc.fontSize(12)
-            // 用绘图 API 画实心圆点（避免字体缺字符显示方框）
-            const bulletX = doc.page.margins.left + 8
             const bulletY = doc.y + 5
-            doc.save()
-            doc.circle(bulletX, bulletY, 2.5).fill('#333333')
-            doc.restore()
-            // 文本从圆点右侧开始
-            const textX = doc.page.margins.left + 20
-            const textWidth = doc.page.width - doc.page.margins.right - textX
-            this.renderRichText(doc, text, fontNormal, fontBold, 12, textX, bulletY - 5, textWidth)
+            doc.circle(ml + 14, bulletY, 2.5).fill(C.accent)
+            doc.fillColor(C.text)
+            this.renderRichText(doc, text, fontNormal, fontBold, 11, ml + 26, bulletY - 5, cw - 26)
+            doc.moveDown(0.15)
           }
           // 普通段落
           else {
-            doc.fontSize(12)
-            this.renderRichText(doc, trimmed, fontNormal, fontBold, 12)
+            doc.fontSize(11).fillColor(C.text)
+            this.renderRichText(doc, trimmed, fontNormal, fontBold, 11)
+            doc.moveDown(0.2)
+          }
+        }
+
+        // 添加页码和页眉装饰线
+        const range = doc.bufferedPageRange()
+        const total = range.count
+        for (let i = 0; i < total; i++) {
+          doc.switchToPage(range.start + i)
+          // 页码
+          doc.font(fontNormal).fontSize(9).fillColor(C.gray)
+          doc.text(`${i + 1} / ${total}`, 0, doc.page.height - 36, {
+            width: pw,
+            align: 'center',
+          })
+          // 页眉装饰线（第 2 页起）
+          if (i > 0) {
+            doc.rect(ml, 42, cw, 1.5).fill(C.accent)
           }
         }
 
@@ -447,7 +751,7 @@ export class ExportService {
 
   /** 渲染富文本（支持 **加粗** 通过字体切换实现） */
   private renderRichText(
-    doc: PDFKit.PDFDocument,
+    doc: any,
     text: string,
     fontNormal: string,
     fontBold: string,

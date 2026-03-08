@@ -68,21 +68,11 @@
           <el-button
             type="warning"
             size="large"
-            @click="handleExport('pdf')"
-            :loading="exporting === 'pdf'"
-          >
-            <el-icon><Document /></el-icon>
-            导出 PDF
-          </el-button>
-
-          <el-button
-            type="danger"
-            size="large"
             @click="showPptTitleDialog"
             :loading="exporting === 'ppt'"
           >
             <el-icon><Document /></el-icon>
-            导出 PPT
+            导出演示文稿
           </el-button>
 
           <el-button
@@ -98,12 +88,12 @@
       <!-- PPT 标题输入对话框 -->
       <el-dialog
         v-model="pptTitleVisible"
-        title="设置 PPT 标题"
+        title="设置演示文稿标题"
         width="480"
         :close-on-click-modal="false"
       >
         <el-form label-position="top">
-          <el-form-item label="PPT 封面标题">
+          <el-form-item label="封面标题">
             <el-input
               v-model="pptTitle"
               placeholder="例如：年终工作总结、Q3 季度总结、员工述职报告"
@@ -120,7 +110,7 @@
       <!-- PPT 生成加载对话框（含流式输出预览） -->
       <el-dialog
         v-model="pptLoadingVisible"
-        title="生成 PPT"
+        title="生成演示文稿"
         width="680"
         :close-on-click-modal="false"
         :show-close="true"
@@ -140,7 +130,7 @@
       <!-- PPT 幻灯片预览全屏对话框 -->
       <el-dialog
         v-model="pptPreviewVisible"
-        title="PPT 预览"
+        title="演示文稿预览"
         fullscreen
         :close-on-click-modal="false"
         class="ppt-preview-dialog"
@@ -268,8 +258,11 @@
         <template #footer>
           <div class="ppt-preview-footer">
             <el-button size="large" @click="pptPreviewVisible = false">取消</el-button>
+            <el-button type="danger" size="large" :loading="pdfSlidesDownloading" @click="confirmPdfSlidesDownload">
+              导出 PDF
+            </el-button>
             <el-button type="primary" size="large" :loading="pptDownloading" @click="confirmPptDownload">
-              确认导出
+              导出 PPTX
             </el-button>
           </div>
         </template>
@@ -285,7 +278,7 @@ import { ElMessage } from 'element-plus'
 import { Document, CopyDocument, Loading } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useSummaryStore } from '@/stores/summary'
-import { exportMarkdown, exportDocx, exportPdf, generateSlides, downloadPptx } from '@/api/exportApi'
+import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides } from '@/api/exportApi'
 import type { PptData } from '@/api/exportApi'
 
 const router = useRouter()
@@ -324,7 +317,13 @@ function renderBold(text: string): string {
 }
 
 function copyContent() {
-  navigator.clipboard.writeText(editableContent.value)
+  // 去掉 Markdown 标记，复制为纯文本
+  const plain = editableContent.value
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-*]\s+/gm, '- ')
+  navigator.clipboard.writeText(plain)
   ElMessage.success('已复制到剪贴板')
 }
 
@@ -332,10 +331,11 @@ function copyContent() {
 const pptLoadingVisible = ref(false)
 const pptPreviewVisible = ref(false)
 const pptDownloading = ref(false)
+const pdfSlidesDownloading = ref(false)
 const slidesData = ref<PptData | null>(null)
 const pptStreamText = ref('')
 const pptStreamBoxRef = ref<HTMLElement | null>(null)
-const pptStatus = ref('AI 正在生成 PPT 结构...')
+const pptStatus = ref('AI 正在生成演示文稿结构...')
 const pptTitleVisible = ref(false)
 const pptTitle = ref('年终工作总结')
 let cancelPptFn: (() => void) | null = null
@@ -353,7 +353,7 @@ function confirmPptTitle() {
 function handlePptExport() {
   exporting.value = 'ppt'
   pptStreamText.value = ''
-  pptStatus.value = 'AI 正在生成 PPT 结构...'
+  pptStatus.value = 'AI 正在生成演示文稿结构...'
   pptLoadingVisible.value = true
 
   cancelPptFn = generateSlides(
@@ -377,7 +377,7 @@ function handlePptExport() {
     (err) => {
       pptLoadingVisible.value = false
       exporting.value = ''
-      ElMessage.error(`生成 PPT 失败: ${err}`)
+      ElMessage.error(`生成演示文稿失败: ${err}`)
     },
     (message) => {
       pptStatus.value = message
@@ -401,12 +401,25 @@ async function confirmPptDownload() {
   try {
     const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
     await downloadPptx(slidesData.value, filename)
-    pptPreviewVisible.value = false
-    ElMessage.success('PPT 已下载')
+    ElMessage.success('PPTX 已下载')
   } catch (err: any) {
     ElMessage.error(`导出失败: ${err.message}`)
   } finally {
     pptDownloading.value = false
+  }
+}
+
+async function confirmPdfSlidesDownload() {
+  if (!slidesData.value) return
+  pdfSlidesDownloading.value = true
+  try {
+    const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
+    await downloadPdfSlides(slidesData.value, filename)
+    ElMessage.success('PDF 已下载')
+  } catch (err: any) {
+    ElMessage.error(`导出失败: ${err.message}`)
+  } finally {
+    pdfSlidesDownloading.value = false
   }
 }
 
@@ -424,10 +437,6 @@ async function handleExport(format: string) {
       case 'docx':
         await exportDocx(editableContent.value, filename)
         ElMessage.success('Word 文件已下载')
-        break
-      case 'pdf':
-        await exportPdf(editableContent.value, filename)
-        ElMessage.success('PDF 文件已下载')
         break
     }
   } catch (err: any) {

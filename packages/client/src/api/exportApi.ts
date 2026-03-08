@@ -149,6 +149,22 @@ export async function downloadPptx(slidesData: PptData, filename = 'work-summary
   downloadBlob(blob, `${filename}.pptx`)
 }
 
+/** 确认导出：发送幻灯片 JSON 到后端生成 PDF 并下载（与 PPT 视觉一致） */
+export async function downloadPdfSlides(slidesData: PptData, filename = 'work-summary') {
+  const response = await fetch('/api/v1/export/pdf-slides', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slidesData, filename }),
+  })
+
+  if (!response.ok) {
+    throw new Error('导出 PDF 失败')
+  }
+
+  const blob = await response.blob()
+  downloadBlob(blob, `${filename}.pdf`)
+}
+
 /** 触发浏览器下载 */
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
