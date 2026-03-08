@@ -36,7 +36,8 @@
       "Bash(find:*)",
       "Read(//c/Users/25198/Desktop/**)",
       "Bash(npm run build:*)",
-      "Bash(Select-String -Pattern \"prompt-builder|generate.routes\")"
+      "Bash(Select-String -Pattern \"prompt-builder|generate.routes\")",
+      "Bash(ls:*)"
     ]
   }
 }
