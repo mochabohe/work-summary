@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import { ExportService } from '../services/export/index.js'
-import type { PptData } from '../services/export/index.js'
+import type { PptData, CustomColors } from '../services/export/index.js'
 
 /** 生成安全的 Content-Disposition 头（支持中文文件名） */
 function safeContentDisposition(filename: string, ext: string): string {
@@ -64,9 +64,9 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
   // 导出 PDF（从幻灯片 JSON 结构生成，与 PPTX 视觉一致）
   app.post<{
-    Body: { slidesData: PptData; filename?: string }
+    Body: { slidesData: PptData; filename?: string; colors?: CustomColors }
   }>('/pdf-slides', { config: { rawBody: false }, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
-    let { slidesData, filename = 'work-summary' } = request.body
+    let { slidesData, filename = 'work-summary', colors } = request.body
 
     if (!slidesData) {
       return reply.status(400).send({ success: false, error: '缺少 slidesData 参数' })
@@ -80,7 +80,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const exportService = new ExportService()
-      const buffer = await exportService.toPdfSlides(slidesData)
+      const buffer = await exportService.toPdfSlides(slidesData, colors)
 
       reply.header('Content-Type', 'application/pdf')
       reply.header('Content-Disposition', safeContentDisposition(filename, 'pdf'))
@@ -93,9 +93,9 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
   // 导出 PPTX（从幻灯片 JSON 结构生成）
   app.post<{
-    Body: { slidesData: PptData; filename?: string }
+    Body: { slidesData: PptData; filename?: string; colors?: CustomColors }
   }>('/pptx', { config: { rawBody: false }, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
-    let { slidesData, filename = 'work-summary' } = request.body
+    let { slidesData, filename = 'work-summary', colors } = request.body
 
     // 数据验证与标准化
     if (!slidesData) {
@@ -111,7 +111,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const exportService = new ExportService()
-      const buffer = await exportService.toPptx(slidesData)
+      const buffer = await exportService.toPptx(slidesData, colors)
 
       reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
       reply.header('Content-Disposition', safeContentDisposition(filename, 'pptx'))

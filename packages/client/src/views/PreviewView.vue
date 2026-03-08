@@ -135,7 +135,21 @@
         :close-on-click-modal="false"
         class="ppt-preview-dialog"
       >
-        <div class="slides-gallery" v-if="slidesData">
+        <!-- 颜色自定义工具栏 -->
+        <div class="color-config-bar">
+          <div class="color-config-item">
+            <span class="color-config-label">主题色</span>
+            <el-color-picker v-model="themeColor" size="small" />
+            <el-input v-model="themeColorText" size="small" class="color-input" @change="onThemeColorText" placeholder="#1B2A4A" />
+          </div>
+          <div class="color-config-item">
+            <span class="color-config-label">高亮色</span>
+            <el-color-picker v-model="highlightColor" size="small" />
+            <el-input v-model="highlightColorText" size="small" class="color-input" @change="onHighlightColorText" placeholder="#4472C4" />
+          </div>
+        </div>
+
+        <div class="slides-gallery" v-if="slidesData" :style="themeVars">
           <div
             v-for="(slide, index) in slidesData.slides"
             :key="index"
@@ -305,7 +319,7 @@ import { Document, CopyDocument, Loading } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useSummaryStore } from '@/stores/summary'
 import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides } from '@/api/exportApi'
-import type { PptData } from '@/api/exportApi'
+import type { PptData, CustomColors } from '@/api/exportApi'
 
 const router = useRouter()
 const summaryStore = useSummaryStore()
@@ -313,6 +327,118 @@ const md = new MarkdownIt()
 
 const editableContent = ref(summaryStore.content)
 const exporting = ref<string>('')
+
+// ====== 颜色自定义 ======
+const themeColor = ref('#1B2A4A')
+const highlightColor = ref('#4472C4')
+const themeColorText = ref('#1B2A4A')
+const highlightColorText = ref('#4472C4')
+
+/** 解析任意 CSS 颜色字符串为 #hex 格式（支持 #fff, red, rgb() 等） */
+function resolveColor(input: string): string {
+  input = input.trim()
+  if (!input) return ''
+  const short = /^#?([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/.exec(input)
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase()
+  if (/^#[a-fA-F0-9]{6}$/i.test(input)) return input.toLowerCase()
+  if (/^[a-fA-F0-9]{6}$/.test(input)) return `#${input}`.toLowerCase()
+  if (/^[a-fA-F0-9]{3}$/.test(input)) return `#${input[0]}${input[0]}${input[1]}${input[1]}${input[2]}${input[2]}`.toLowerCase()
+  // 使用 canvas 解析命名颜色
+  const ctx = document.createElement('canvas').getContext('2d')
+  if (ctx) {
+    ctx.fillStyle = '#010101'
+    ctx.fillStyle = input
+    if (ctx.fillStyle !== '#010101' || input.toLowerCase() === 'black') return ctx.fillStyle
+  }
+  return ''
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0]
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let h = 0, s = 0
+  const l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+    else if (max === g) h = ((b - r) / d + 2) / 6
+    else h = ((r - g) / d + 4) / 6
+  }
+  return [h * 360, s * 100, l * 100]
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const c = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * Math.max(0, Math.min(1, c))).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+function adjustLight(hex: string, amount: number): string {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex))
+  return hslToHex(h, s, Math.max(0, Math.min(100, l + amount)))
+}
+
+function shiftHue(hex: string, degrees: number): string {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex))
+  return hslToHex((h + degrees + 360) % 360, s, l)
+}
+
+// 颜色输入同步
+watch(themeColor, (v) => { themeColorText.value = v })
+watch(highlightColor, (v) => { highlightColorText.value = v })
+
+function onThemeColorText(val: string) {
+  const hex = resolveColor(val)
+  if (hex) { themeColor.value = hex; themeColorText.value = hex }
+}
+function onHighlightColorText(val: string) {
+  const hex = resolveColor(val)
+  if (hex) { highlightColor.value = hex; highlightColorText.value = hex }
+}
+
+/** 根据主题色和高亮色生成全部 CSS 自定义属性 */
+const themeVars = computed(() => {
+  const t = themeColor.value
+  const h = highlightColor.value
+  const tRgb = hexToRgb(t)
+  const hRgb = hexToRgb(h)
+  // 从高亮色推导互补色（类似原来的 teal）
+  const h2 = shiftHue(h, 160)
+  const h2Rgb = hexToRgb(h2)
+  // 从高亮色推导第三辅助色（类似原来的 purple）
+  const h3 = shiftHue(h, -60)
+
+  return {
+    '--t': t,
+    '--t-rgb': tRgb.join(' '),
+    '--t-darkest': adjustLight(t, -15),
+    '--t-darker': adjustLight(t, -8),
+    '--t-lighter': adjustLight(t, 8),
+    '--t-lightest': adjustLight(t, 12),
+    '--t-text': adjustLight(t, -5),
+    '--h': h,
+    '--h-rgb': hRgb.join(' '),
+    '--h-darker': adjustLight(h, -10),
+    '--h-lighter': adjustLight(h, 10),
+    '--h-bright': adjustLight(h, 15),
+    '--h2': h2,
+    '--h2-rgb': h2Rgb.join(' '),
+    '--h2-darker': adjustLight(h2, -10),
+    '--h2-lighter': adjustLight(h2, 10),
+    '--h3': h3,
+  } as Record<string, string>
+})
 
 // 同步编辑内容到 store
 watch(editableContent, (val) => {
@@ -459,12 +585,17 @@ function cancelPptExport() {
   exporting.value = ''
 }
 
+/** 获取当前自定义配色 */
+function getCustomColors(): CustomColors {
+  return { themeColor: themeColor.value, highlightColor: highlightColor.value }
+}
+
 async function confirmPptDownload() {
   if (!slidesData.value) return
   pptDownloading.value = true
   try {
     const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
-    await downloadPptx(slidesData.value, filename)
+    await downloadPptx(slidesData.value, filename, getCustomColors())
     ElMessage.success('PPTX 已下载')
   } catch (err: any) {
     ElMessage.error(`导出失败: ${err.message}`)
@@ -478,7 +609,7 @@ async function confirmPdfSlidesDownload() {
   pdfSlidesDownloading.value = true
   try {
     const filename = `${pptTitle.value || '年终工作总结'}-${new Date().getFullYear()}`
-    await downloadPdfSlides(slidesData.value, filename)
+    await downloadPdfSlides(slidesData.value, filename, getCustomColors())
     ElMessage.success('PDF 已下载')
   } catch (err: any) {
     ElMessage.error(`导出失败: ${err.message}`)
@@ -624,6 +755,19 @@ async function handleExport(format: string) {
   color: #666;
 }
 
+/* 全屏对话框布局：让画廊占满对话框主体 */
+.ppt-preview-dialog :deep(.el-dialog) {
+  display: flex;
+  flex-direction: column;
+}
+.ppt-preview-dialog :deep(.el-dialog__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
 /* 幻灯片预览 — 沉浸式深色画廊 */
 .slides-gallery {
   display: flex;
@@ -631,15 +775,14 @@ async function handleExport(format: string) {
   align-items: center;
   gap: 40px;
   padding: 36px 0 48px;
-  max-height: calc(100vh - 140px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background:
-    /* 微妙径向光晕 */
-    radial-gradient(ellipse at 50% 0%, rgba(68, 114, 196, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 0% 50%, rgba(44, 185, 197, 0.03) 0%, transparent 40%),
-    /* 基色 */
+    radial-gradient(ellipse at 50% 0%, rgb(var(--h-rgb) / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 0% 50%, rgb(var(--h2-rgb) / 0.03) 0%, transparent 40%),
     linear-gradient(180deg, #f5f7fa 0%, #edf1f7 50%, #e8ecf2 100%);
-  border-radius: 8px;
+  border-radius: 0;
 }
 .slide-wrapper {
   position: relative;
@@ -671,19 +814,15 @@ async function handleExport(format: string) {
 /* --- 深色页 --- */
 .slide-dark {
   background:
-    /* 噪点纹理叠加 — 增加质感深度 */
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
-    /* 对角线几何纹理 — 精致商务感 */
     repeating-linear-gradient(
       -45deg, transparent, transparent 8px,
-      rgba(68, 114, 196, 0.018) 8px, rgba(68, 114, 196, 0.018) 9px
+      rgb(var(--h-rgb) / 0.018) 8px, rgb(var(--h-rgb) / 0.018) 9px
     ),
-    /* mesh 径向渐变 — 光源感 */
-    radial-gradient(ellipse at 20% 80%, rgba(36, 59, 106, 0.6) 0%, transparent 50%),
-    radial-gradient(ellipse at 85% 15%, rgba(44, 185, 197, 0.07) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 0%, rgba(68, 114, 196, 0.1) 0%, transparent 35%),
-    /* 主渐变 */
-    linear-gradient(160deg, #060d1a 0%, #0f1d38 25%, #1B2A4A 50%, #1a3260 75%, #152548 100%);
+    radial-gradient(ellipse at 20% 80%, rgb(var(--t-rgb) / 0.6) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgb(var(--h2-rgb) / 0.07) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 0%, rgb(var(--h-rgb) / 0.1) 0%, transparent 35%),
+    linear-gradient(160deg, var(--t-darkest) 0%, var(--t-darker) 25%, var(--t) 50%, var(--t-lighter) 75%, var(--t) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -693,7 +832,7 @@ async function handleExport(format: string) {
 /* 装饰性光环 — 多层辉光 */
 .deco-ring {
   position: absolute;
-  border: 1.5px solid rgba(68, 114, 196, 0.12);
+  border: 1.5px solid rgb(var(--h-rgb) / 0.12);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -701,32 +840,32 @@ async function handleExport(format: string) {
   width: 320px; height: 320px;
   top: -100px; left: -100px;
   box-shadow:
-    0 0 80px rgba(68, 114, 196, 0.06),
-    inset 0 0 60px rgba(68, 114, 196, 0.03);
+    0 0 80px rgb(var(--h-rgb) / 0.06),
+    inset 0 0 60px rgb(var(--h-rgb) / 0.03);
 }
 .deco-ring-tl::after {
   content: '';
   position: absolute;
   width: 200px; height: 200px;
   top: 60px; left: 60px;
-  border: 1px solid rgba(44, 185, 197, 0.1);
+  border: 1px solid rgb(var(--h2-rgb) / 0.1);
   border-radius: 50%;
-  box-shadow: 0 0 40px rgba(44, 185, 197, 0.04);
+  box-shadow: 0 0 40px rgb(var(--h2-rgb) / 0.04);
 }
 .deco-ring-br {
   width: 260px; height: 260px;
   bottom: -80px; right: -80px;
-  border-color: rgba(44, 185, 197, 0.1);
+  border-color: rgb(var(--h2-rgb) / 0.1);
   box-shadow:
-    0 0 60px rgba(44, 185, 197, 0.05),
-    inset 0 0 40px rgba(44, 185, 197, 0.02);
+    0 0 60px rgb(var(--h2-rgb) / 0.05),
+    inset 0 0 40px rgb(var(--h2-rgb) / 0.02);
 }
 .deco-ring-br::after {
   content: '';
   position: absolute;
   width: 400px; height: 400px;
   top: -70px; left: -70px;
-  border: 1px solid rgba(68, 114, 196, 0.04);
+  border: 1px solid rgb(var(--h-rgb) / 0.04);
   border-radius: 50%;
 }
 .deco-ring.small { width: 180px; height: 180px; }
@@ -749,16 +888,16 @@ async function handleExport(format: string) {
 /* 标题页强调装饰线 — 更长渐变，金属光泽 */
 .title-accent-line {
   width: 72px; height: 2.5px;
-  background: linear-gradient(90deg, transparent, #4472C4, #2CB9C5, transparent);
+  background: linear-gradient(90deg, transparent, var(--h), var(--h2), transparent);
   margin: 0 auto 24px;
   border-radius: 2px;
-  box-shadow: 0 0 12px rgba(68, 114, 196, 0.3);
+  box-shadow: 0 0 12px rgb(var(--h-rgb) / 0.3);
 }
 .title-accent-line.bottom {
   margin: 28px auto 0;
   width: 48px; height: 2px;
   opacity: 0.4;
-  box-shadow: 0 0 8px rgba(44, 185, 197, 0.2);
+  box-shadow: 0 0 8px rgb(var(--h2-rgb) / 0.2);
 }
 
 .slide-center { text-align: center; padding: 0 56px; position: relative; z-index: 1; }
@@ -766,7 +905,7 @@ async function handleExport(format: string) {
   font-family: 'Noto Serif SC', 'Georgia', serif;
   color: #fff; font-size: 36px; font-weight: 700; margin: 0 0 16px;
   letter-spacing: 4px;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.35), 0 0 40px rgba(68, 114, 196, 0.15);
+  text-shadow: 0 2px 20px rgba(0,0,0,0.35), 0 0 40px rgb(var(--h-rgb) / 0.15);
 }
 .slide-subtitle {
   color: rgba(176, 190, 197, 0.85); font-size: 17px; margin: 0;
@@ -777,14 +916,14 @@ async function handleExport(format: string) {
   font-family: 'Noto Serif SC', 'Georgia', serif;
   color: #fff; font-size: 30px; font-weight: 700; margin: 0 0 24px;
   letter-spacing: 3px;
-  text-shadow: 0 2px 16px rgba(0,0,0,0.25), 0 0 30px rgba(68, 114, 196, 0.1);
+  text-shadow: 0 2px 16px rgba(0,0,0,0.25), 0 0 30px rgb(var(--h-rgb) / 0.1);
 }
 .slide-section-bar {
   width: 88px; height: 3px;
-  background: linear-gradient(90deg, transparent, #4472C4, #2CB9C5, transparent);
+  background: linear-gradient(90deg, transparent, var(--h), var(--h2), transparent);
   margin: 0 auto;
   border-radius: 2px;
-  box-shadow: 0 0 16px rgba(68, 114, 196, 0.25);
+  box-shadow: 0 0 16px rgb(var(--h-rgb) / 0.25);
 }
 
 /* --- section 页图标 --- */
@@ -799,14 +938,13 @@ async function handleExport(format: string) {
   display: flex;
   flex-direction: row;
   background:
-    /* 右侧内容区微妙网格纹理 */
     repeating-linear-gradient(
       0deg, transparent, transparent 39px,
-      rgba(68, 114, 196, 0.015) 39px, rgba(68, 114, 196, 0.015) 40px
+      rgb(var(--h-rgb) / 0.015) 39px, rgb(var(--h-rgb) / 0.015) 40px
     ),
     repeating-linear-gradient(
       90deg, transparent, transparent 39px,
-      rgba(68, 114, 196, 0.015) 39px, rgba(68, 114, 196, 0.015) 40px
+      rgb(var(--h-rgb) / 0.015) 39px, rgb(var(--h-rgb) / 0.015) 40px
     ),
     linear-gradient(180deg, #ffffff 0%, #f7f9fc 50%, #f0f3f8 100%);
 }
@@ -815,17 +953,13 @@ async function handleExport(format: string) {
 .slide-sidebar {
   width: 28%;
   background:
-    /* 对角线纹理 */
     repeating-linear-gradient(
       -45deg, transparent, transparent 6px,
       rgba(255, 255, 255, 0.012) 6px, rgba(255, 255, 255, 0.012) 7px
     ),
-    /* 顶部光晕 */
-    radial-gradient(ellipse at 50% 0%, rgba(68, 114, 196, 0.15) 0%, transparent 50%),
-    /* 底部冷光 */
-    radial-gradient(ellipse at 30% 100%, rgba(44, 185, 197, 0.08) 0%, transparent 40%),
-    /* 主渐变 */
-    linear-gradient(180deg, #060d1a 0%, #0f1d38 30%, #1B2A4A 60%, #1e3563 100%);
+    radial-gradient(ellipse at 50% 0%, rgb(var(--h-rgb) / 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 30% 100%, rgb(var(--h2-rgb) / 0.08) 0%, transparent 40%),
+    linear-gradient(180deg, var(--t-darkest) 0%, var(--t-darker) 30%, var(--t) 60%, var(--t-lightest) 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -839,19 +973,19 @@ async function handleExport(format: string) {
   position: absolute;
   top: -50px; right: -50px;
   width: 160px; height: 160px;
-  border: 1.5px solid rgba(68, 114, 196, 0.1);
+  border: 1.5px solid rgb(var(--h-rgb) / 0.1);
   border-radius: 50%;
   pointer-events: none;
-  box-shadow: inset 0 0 30px rgba(68, 114, 196, 0.04);
+  box-shadow: inset 0 0 30px rgb(var(--h-rgb) / 0.04);
 }
 .sidebar-deco-bot {
   position: absolute;
   bottom: -35px; left: -35px;
   width: 110px; height: 110px;
-  border: 1px solid rgba(44, 185, 197, 0.08);
+  border: 1px solid rgb(var(--h2-rgb) / 0.08);
   border-radius: 50%;
   pointer-events: none;
-  box-shadow: inset 0 0 20px rgba(44, 185, 197, 0.03);
+  box-shadow: inset 0 0 20px rgb(var(--h2-rgb) / 0.03);
 }
 .sidebar-icon {
   font-size: 44px;
@@ -875,10 +1009,10 @@ async function handleExport(format: string) {
 }
 .sidebar-line {
   width: 36px; height: 2.5px;
-  background: linear-gradient(90deg, transparent, #4472C4, #2CB9C5, transparent);
+  background: linear-gradient(90deg, transparent, var(--h), var(--h2), transparent);
   margin-top: 18px;
   border-radius: 2px;
-  box-shadow: 0 0 10px rgba(68, 114, 196, 0.2);
+  box-shadow: 0 0 10px rgb(var(--h-rgb) / 0.2);
 }
 
 /* --- 右侧内容区 --- */
@@ -912,7 +1046,7 @@ async function handleExport(format: string) {
   background: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(240,244,249,0.9) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(68, 114, 196, 0.06);
+  border: 1px solid rgb(var(--h-rgb) / 0.06);
   border-left: none;
   border-radius: 0 10px 10px 0;
   padding: 10px 16px 10px 18px;
@@ -921,8 +1055,7 @@ async function handleExport(format: string) {
   line-height: 1.7;
   box-shadow:
     0 1px 3px rgba(0,0,0,0.04),
-    0 4px 12px rgba(68, 114, 196, 0.04);
-  /* 伸展填满可用垂直空间 */
+    0 4px 12px rgb(var(--h-rgb) / 0.04);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -933,25 +1066,25 @@ async function handleExport(format: string) {
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 3.5px;
-  background: linear-gradient(180deg, #4472C4, #2CB9C5);
+  background: linear-gradient(180deg, var(--h), var(--h2));
   border-radius: 2px 0 0 2px;
-  box-shadow: 2px 0 8px rgba(68, 114, 196, 0.15);
+  box-shadow: 2px 0 8px rgb(var(--h-rgb) / 0.15);
 }
 .bullet-card.sm {
   padding: 7px 12px 7px 15px;
   font-size: 12px;
 }
-.bullet-card :deep(strong) { color: #1B2A4A; font-weight: 700; }
+.bullet-card :deep(strong) { color: var(--t, #1B2A4A); font-weight: 700; }
 
 /* 小标题独立展示模块 */
 .bullet-card :deep(.bc-title) {
   font-family: 'Noto Serif SC', 'Georgia', serif;
   font-size: 14px;
   font-weight: 700;
-  color: #1a2744;
+  color: var(--t-text, #1a2744);
   margin-bottom: 5px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(68, 114, 196, 0.1);
+  border-bottom: 1px solid rgb(var(--h-rgb) / 0.1);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -961,10 +1094,10 @@ async function handleExport(format: string) {
   content: '';
   display: inline-block;
   width: 7px; height: 7px;
-  background: linear-gradient(135deg, #4472C4, #2CB9C5);
+  background: linear-gradient(135deg, var(--h), var(--h2));
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 6px rgba(68, 114, 196, 0.3);
+  box-shadow: 0 0 6px rgb(var(--h-rgb) / 0.3);
 }
 .bullet-card :deep(.bc-desc) {
   font-size: 12px;
@@ -992,13 +1125,13 @@ async function handleExport(format: string) {
   background: linear-gradient(160deg, rgba(255,255,255,0.95) 0%, rgba(240,244,249,0.9) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(68, 114, 196, 0.08);
+  border: 1px solid rgb(var(--h-rgb) / 0.08);
   border-radius: 14px;
   padding: 18px 10px 14px;
   text-align: center;
   box-shadow:
     0 2px 4px rgba(0,0,0,0.03),
-    0 8px 24px rgba(68, 114, 196, 0.06),
+    0 8px 24px rgb(var(--h-rgb) / 0.06),
     inset 0 1px 0 rgba(255,255,255,0.9);
   position: relative;
   overflow: hidden;
@@ -1008,20 +1141,20 @@ async function handleExport(format: string) {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #3a8ef5, #4472C4, #6b5ce7);
+  background: linear-gradient(90deg, var(--h-bright), var(--h), var(--h3));
 }
 .metric-card::after {
   content: '';
   position: absolute;
   top: 3px; left: 0; right: 0;
   height: 40px;
-  background: linear-gradient(180deg, rgba(58, 142, 245, 0.04) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgb(var(--h-rgb) / 0.04) 0%, transparent 100%);
   pointer-events: none;
 }
 .metric-value {
   font-family: 'Noto Serif SC', 'Georgia', serif;
   font-size: 30px; font-weight: 900;
-  background: linear-gradient(135deg, #3a8ef5, #2d6fd6, #4472C4);
+  background: linear-gradient(135deg, var(--h-bright), var(--h-darker), var(--h));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -1043,17 +1176,17 @@ async function handleExport(format: string) {
   background: linear-gradient(160deg, rgba(255,255,255,0.92) 0%, rgba(244,247,251,0.9) 100%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(68, 114, 196, 0.06);
+  border: 1px solid rgb(var(--h-rgb) / 0.06);
   border-radius: 14px;
   overflow: hidden;
   box-shadow:
     0 2px 6px rgba(0,0,0,0.03),
-    0 8px 24px rgba(68, 114, 196, 0.05);
+    0 8px 24px rgb(var(--h-rgb) / 0.05);
   display: flex;
   flex-direction: column;
 }
 .col-panel-header {
-  background: linear-gradient(135deg, #3a63a8, #4472C4, #5b8bd6);
+  background: linear-gradient(135deg, var(--h-darker), var(--h), var(--h-lighter));
   color: #fff;
   font-family: 'Noto Serif SC', 'Georgia', serif;
   font-size: 14px;
@@ -1064,7 +1197,7 @@ async function handleExport(format: string) {
   flex-shrink: 0;
 }
 .col-panel.teal .col-panel-header {
-  background: linear-gradient(135deg, #22a0ac, #2CB9C5, #3dd4e0);
+  background: linear-gradient(135deg, var(--h2-darker), var(--h2), var(--h2-lighter));
 }
 .col-panel-body {
   padding: 10px 12px;
@@ -1082,15 +1215,14 @@ async function handleExport(format: string) {
   background: linear-gradient(160deg, rgba(255,255,255,0.92) 0%, rgba(244,247,251,0.9) 100%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(68, 114, 196, 0.06);
+  border: 1px solid rgb(var(--h-rgb) / 0.06);
   border-radius: 14px;
   padding: 16px 18px;
   box-shadow:
     0 2px 6px rgba(0,0,0,0.03),
-    0 8px 24px rgba(68, 114, 196, 0.05);
+    0 8px 24px rgb(var(--h-rgb) / 0.05);
   position: relative;
   overflow: hidden;
-  /* 伸展填满垂直空间 */
   display: flex;
   flex-direction: column;
 }
@@ -1099,19 +1231,19 @@ async function handleExport(format: string) {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #4472C4, #2CB9C5, #6b5ce7);
+  background: linear-gradient(90deg, var(--h), var(--h2), var(--h3));
 }
 .grid-panel::after {
   content: '';
   position: absolute;
   top: 3px; left: 0; right: 0;
   height: 30px;
-  background: linear-gradient(180deg, rgba(68, 114, 196, 0.03) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgb(var(--h-rgb) / 0.03) 0%, transparent 100%);
   pointer-events: none;
 }
 .grid-panel-title {
   font-family: 'Noto Serif SC', 'Georgia', serif;
-  font-size: 13px; font-weight: 700; color: #1a2744;
+  font-size: 13px; font-weight: 700; color: var(--t-text, #1a2744);
   margin-bottom: 10px; letter-spacing: 0.8px;
   position: relative; z-index: 1;
   flex-shrink: 0;
@@ -1133,11 +1265,11 @@ async function handleExport(format: string) {
   position: absolute;
   left: 0; top: 7px;
   width: 5px; height: 5px;
-  background: linear-gradient(135deg, #4472C4, #2CB9C5);
+  background: linear-gradient(135deg, var(--h), var(--h2));
   border-radius: 50%;
-  box-shadow: 0 0 4px rgba(68, 114, 196, 0.25);
+  box-shadow: 0 0 4px rgb(var(--h-rgb) / 0.25);
 }
-.grid-panel-bullets li :deep(strong) { color: #1a2744; }
+.grid-panel-bullets li :deep(strong) { color: var(--t-text, #1a2744); }
 
 /* --- 总结标签 --- */
 .summary-tags {
@@ -1164,12 +1296,12 @@ async function handleExport(format: string) {
   pointer-events: none;
 }
 .tag-0 {
-  background: linear-gradient(135deg, #3a63a8, #4472C4, #5b8bd6);
-  box-shadow: 0 3px 12px rgba(68, 114, 196, 0.35);
+  background: linear-gradient(135deg, var(--h-darker), var(--h), var(--h-lighter));
+  box-shadow: 0 3px 12px rgb(var(--h-rgb) / 0.35);
 }
 .tag-1 {
-  background: linear-gradient(135deg, #22a0ac, #2CB9C5, #3dd4e0);
-  box-shadow: 0 3px 12px rgba(44, 185, 197, 0.35);
+  background: linear-gradient(135deg, var(--h2-darker), var(--h2), var(--h2-lighter));
+  box-shadow: 0 3px 12px rgb(var(--h2-rgb) / 0.35);
 }
 .tag-2 {
   background: linear-gradient(135deg, #d06c1a, #E67E22, #f0993c);
@@ -1186,6 +1318,32 @@ async function handleExport(format: string) {
 .tag-5 {
   background: linear-gradient(135deg, #1e9050, #27AE60, #3cc975);
   box-shadow: 0 3px 12px rgba(39, 174, 96, 0.35);
+}
+
+/* --- 颜色配置工具栏 --- */
+.color-config-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 12px 24px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e8ecf2;
+  flex-shrink: 0;
+}
+.color-config-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.color-config-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d4f63;
+  white-space: nowrap;
+}
+.color-input {
+  width: 110px;
 }
 
 .ppt-preview-footer { display: flex; justify-content: center; gap: 16px; }

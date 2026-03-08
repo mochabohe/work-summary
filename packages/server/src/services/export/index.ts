@@ -42,26 +42,118 @@ export interface PptData {
   slides: PptSlide[]
 }
 
-const PPT_COLORS = {
-  darkBg: '1B2A4A',
-  accent: '4472C4',
-  accentLight: 'D6E4F0',
-  teal: '2CB9C5',
-  titleText: 'FFFFFF',
-  bodyText: '333333',
-  subtitleText: 'B0BEC5',
-  lightGray: 'F3F4F6',
-  cardBg: 'F8FAFC',
+/** 用户自定义配色 */
+export interface CustomColors {
+  themeColor: string   // 主题深色，如 '#1B2A4A'
+  highlightColor: string // 高亮色，如 '#4472C4'
 }
+
+// --- 颜色工具函数 ---
+function hexToRgb(hex: string): [number, number, number] {
+  hex = hex.replace(/^#/, '')
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2]
+  const n = parseInt(hex, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let h = 0, s = 0
+  const l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+    else if (max === g) h = ((b - r) / d + 2) / 6
+    else h = ((r - g) / d + 4) / 6
+  }
+  return [h * 360, s * 100, l * 100]
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const c = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * Math.max(0, Math.min(1, c))).toString(16).padStart(2, '0')
+  }
+  return `${f(0)}${f(8)}${f(4)}`
+}
+
+function adjustLight(hex: string, amount: number): string {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex))
+  return hslToHex(h, s, Math.max(0, Math.min(100, l + amount)))
+}
+
+function shiftHue(hex: string, degrees: number): string {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex))
+  return hslToHex((h + degrees + 360) % 360, s, l)
+}
+
+/** 根据用户自定义颜色构建 PPTX 配色（无 # 前缀） */
+function buildPptColors(colors?: CustomColors) {
+  const theme = colors?.themeColor?.replace(/^#/, '') || '1B2A4A'
+  const highlight = colors?.highlightColor?.replace(/^#/, '') || '4472C4'
+  const teal = shiftHue(highlight, 160)
+  const bright = adjustLight(highlight, 15)
+  return {
+    darkBg: theme,
+    accent: highlight,
+    accentLight: adjustLight(highlight, 35),
+    teal,
+    bright,
+    titleText: 'FFFFFF',
+    bodyText: '333333',
+    subtitleText: 'B0BEC5',
+    lightGray: 'F3F4F6',
+    cardBg: 'F8FAFC',
+  }
+}
+
+/** 根据用户自定义颜色构建 PDF 配色（有 # 前缀） */
+function buildPdfColors(colors?: CustomColors) {
+  const theme = colors?.themeColor || '#1B2A4A'
+  const highlight = colors?.highlightColor || '#4472C4'
+  const themeNoHash = theme.replace(/^#/, '')
+  const highlightNoHash = highlight.replace(/^#/, '')
+  const teal = '#' + shiftHue(highlightNoHash, 160)
+  const tealEnd = '#' + adjustLight(shiftHue(highlightNoHash, 160), 10)
+  const bright = '#' + adjustLight(highlightNoHash, 15)
+  const highlightEnd = '#' + adjustLight(highlightNoHash, 10)
+  return {
+    dark: theme,
+    darkDeep: '#' + adjustLight(themeNoHash, -10),
+    darkLight: '#' + adjustLight(themeNoHash, 8),
+    accent: highlight,
+    accentEnd: highlightEnd,
+    teal,
+    tealEnd,
+    bright,
+    white: '#FFFFFF',
+    text: '#333333',
+    subtitle: '#B0BEC5',
+    gray55: '#555555',
+    gray99: '#999999',
+    cardBg: '#F8FAFC',
+  }
+}
+
 const PPT_FONT = '微软雅黑'
 
 export class ExportService {
+  // 当前渲染使用的 PPTX 配色
+  private PC = buildPptColors()
+
   /** 将 AI 生成的幻灯片结构转换为 PPTX Buffer */
-  async toPptx(data: PptData): Promise<Buffer> {
+  async toPptx(data: PptData, colors?: CustomColors): Promise<Buffer> {
     // 防御性检查
     if (!data || !Array.isArray(data.slides)) {
       throw new Error(`无效的幻灯片数据: slides 不是数组 (类型: ${typeof data?.slides})`)
     }
+
+    this.PC = buildPptColors(colors)
 
     const pptx = new PptxGenJS()
     pptx.layout = 'LAYOUT_WIDE'
@@ -92,24 +184,24 @@ export class ExportService {
   private addDarkDecorations(slide: any, full = true) {
     slide.background = { color: '0a1628' }
     // 渐变覆盖层
-    slide.addShape('rect' as any, { x: 0, y: 0, w: 13.33, h: 7.5, fill: { color: PPT_COLORS.darkBg, transparency: 30 } })
+    slide.addShape('rect' as any, { x: 0, y: 0, w: 13.33, h: 7.5, fill: { color: this.PC.darkBg, transparency: 30 } })
     // 左上角装饰圆环
     slide.addShape('ellipse' as any, {
       x: -1.2, y: -1.2, w: 4.0, h: 4.0,
-      line: { color: PPT_COLORS.accent, width: 1.5, transparency: 80 },
+      line: { color: this.PC.accent, width: 1.5, transparency: 80 },
       fill: { type: 'none' },
     })
     if (full) {
       slide.addShape('ellipse' as any, {
         x: -0.5, y: -0.5, w: 2.6, h: 2.6,
-        line: { color: PPT_COLORS.teal, width: 1, transparency: 85 },
+        line: { color: this.PC.teal, width: 1, transparency: 85 },
         fill: { type: 'none' },
       })
     }
     // 右下角装饰圆环
     slide.addShape('ellipse' as any, {
       x: 10.8, y: 5.5, w: 3.2, h: 3.2,
-      line: { color: PPT_COLORS.teal, width: 1.5, transparency: 82 },
+      line: { color: this.PC.teal, width: 1.5, transparency: 82 },
       fill: { type: 'none' },
     })
   }
@@ -117,32 +209,34 @@ export class ExportService {
   private renderTitleSlide(slide: any, s: PptSlide) {
     this.addDarkDecorations(slide, true)
     // 上方装饰线
-    slide.addShape('rect' as any, { x: 5.9, y: 2.2, w: 1.5, h: 0.04, fill: { color: PPT_COLORS.accent } })
+    slide.addShape('rect' as any, { x: 5.9, y: 2.2, w: 1.5, h: 0.04, fill: { color: this.PC.accent } })
     slide.addText(s.title, {
       x: 0.5, y: 2.5, w: 12.33, h: 1.5,
-      fontSize: 36, fontFace: PPT_FONT, color: PPT_COLORS.titleText,
+      fontSize: 36, fontFace: '黑体', color: this.PC.titleText,
       bold: true, align: 'center', valign: 'middle',
+      shadow: { type: 'outer', blur: 6, offset: 2, angle: 90, color: '000000', opacity: 0.2 },
     })
     if (s.subtitle) {
       slide.addText(s.subtitle, {
         x: 0.5, y: 4.2, w: 12.33, h: 1.0,
-        fontSize: 20, fontFace: PPT_FONT, color: PPT_COLORS.subtitleText,
+        fontSize: 20, fontFace: PPT_FONT, color: this.PC.subtitleText,
         align: 'center', valign: 'middle',
       })
     }
     // 下方装饰线
-    slide.addShape('rect' as any, { x: 6.1, y: 5.5, w: 1.0, h: 0.03, fill: { color: PPT_COLORS.teal, transparency: 40 } })
+    slide.addShape('rect' as any, { x: 6.1, y: 5.5, w: 1.0, h: 0.03, fill: { color: this.PC.teal, transparency: 40 } })
   }
 
   private renderSectionSlide(slide: any, s: PptSlide) {
     this.addDarkDecorations(slide, false)
     slide.addText(s.title, {
       x: 0.5, y: 2.5, w: 12.33, h: 1.5,
-      fontSize: 32, fontFace: PPT_FONT, color: PPT_COLORS.titleText,
+      fontSize: 32, fontFace: '黑体', color: this.PC.titleText,
       bold: true, align: 'center', valign: 'middle',
+      shadow: { type: 'outer', blur: 4, offset: 1, angle: 90, color: '000000', opacity: 0.15 },
     })
     // 渐变强调条
-    slide.addShape('rect' as any, { x: 5.7, y: 4.3, w: 2.0, h: 0.06, fill: { color: PPT_COLORS.accent } })
+    slide.addShape('rect' as any, { x: 5.7, y: 4.3, w: 2.0, h: 0.06, fill: { color: this.PC.accent } })
   }
 
   /**
@@ -159,8 +253,8 @@ export class ExportService {
       if (match.index > lastIndex) {
         runs.push({ text: text.substring(lastIndex, match.index), options: { fontSize, fontFace: PPT_FONT, color, bold: false } })
       }
-      // 加粗部分
-      runs.push({ text: match[1], options: { fontSize, fontFace: PPT_FONT, color: PPT_COLORS.darkBg, bold: true } })
+      // 加粗部分 — 使用黑体增强加粗视觉
+      runs.push({ text: match[1], options: { fontSize, fontFace: '黑体', color: this.PC.darkBg, bold: true } })
       lastIndex = match.index + match[0].length
     }
     // 剩余普通文字
@@ -211,34 +305,34 @@ export class ExportService {
     const sideW = 3.7
     // 侧栏背景（深蓝渐变）
     slide.addShape('rect' as any, { x: 0, y: 0, w: sideW, h: 7.5, fill: { color: '0a1628' } })
-    slide.addShape('rect' as any, { x: 0, y: 0, w: sideW, h: 7.5, fill: { color: PPT_COLORS.darkBg, transparency: 30 } })
+    slide.addShape('rect' as any, { x: 0, y: 0, w: sideW, h: 7.5, fill: { color: this.PC.darkBg, transparency: 30 } })
     // 装饰圆环
     slide.addShape('ellipse' as any, {
       x: sideW - 1.5, y: -0.8, w: 2.2, h: 2.2,
-      line: { color: PPT_COLORS.accent, width: 1, transparency: 80 }, fill: { type: 'none' },
+      line: { color: this.PC.accent, width: 1, transparency: 80 }, fill: { type: 'none' },
     })
     slide.addShape('ellipse' as any, {
       x: -0.6, y: 5.5, w: 1.6, h: 1.6,
-      line: { color: PPT_COLORS.teal, width: 1, transparency: 85 }, fill: { type: 'none' },
+      line: { color: this.PC.teal, width: 1, transparency: 85 }, fill: { type: 'none' },
     })
     // 图标圆
     const iconX = sideW / 2 - 0.5
-    slide.addShape('ellipse' as any, { x: iconX, y: 2.0, w: 1.0, h: 1.0, fill: { color: PPT_COLORS.accent } })
+    slide.addShape('ellipse' as any, { x: iconX, y: 2.0, w: 1.0, h: 1.0, fill: { color: this.PC.accent } })
     // 图标字符（标题首字）
     slide.addText(title[0] || '', {
       x: iconX, y: 2.0, w: 1.0, h: 1.0,
-      fontSize: 26, fontFace: PPT_FONT, color: 'FFFFFF', align: 'center', valign: 'middle', bold: true,
+      fontSize: 26, fontFace: '黑体', color: 'FFFFFF', align: 'center', valign: 'middle', bold: true,
     })
     // 标题
     slide.addText(title, {
       x: 0.2, y: 3.3, w: sideW - 0.4, h: 2.2,
-      fontSize: 18, fontFace: PPT_FONT, color: 'FFFFFF', bold: true,
+      fontSize: 18, fontFace: '黑体', color: 'FFFFFF', bold: true,
       align: 'center', valign: 'top', lineSpacingMultiple: 1.4,
     })
     // 装饰线
     slide.addShape('rect' as any, {
       x: sideW / 2 - 0.5, y: 5.6, w: 1.0, h: 0.04,
-      fill: { color: PPT_COLORS.accent },
+      fill: { color: this.PC.accent },
     })
     // 白色内容区背景
     slide.addShape('rect' as any, {
@@ -269,18 +363,18 @@ export class ExportService {
     return m ? { title: m[1], desc: m[2] } : null
   }
 
-  /** 渲染卡片式要点列表（左侧强调条 + 小标题独立展示） */
-  private renderBulletCards(slide: any, bullets: string[], cx: number, startY: number, cw: number) {
+  /** 渲染卡片式要点列表（左侧强调条 + 小标题独立展示，自动填满可用空间） */
+  private renderBulletCards(slide: any, bullets: string[], cx: number, startY: number, cw: number, endY = 7.0) {
     const maxItems = Math.min(bullets.length, 8)
     const gap = 0.12
-    const cardH = Math.min(0.78, (7.0 - startY) / maxItems - gap)
+    // 卡片均分可用空间，无上限，确保填满整页
+    const cardH = (endY - startY - gap * (maxItems - 1)) / maxItems
     for (let i = 0; i < maxItems; i++) {
       const y = startY + i * (cardH + gap)
-      if (y + cardH > 7.3) break
       // 卡片背景
       slide.addShape('rect' as any, { x: cx + 0.06, y, w: cw - 0.06, h: cardH, fill: { color: 'F0F4F9' }, rectRadius: 0.05 })
       // 左侧强调条
-      slide.addShape('rect' as any, { x: cx, y, w: 0.06, h: cardH, fill: { color: PPT_COLORS.accent } })
+      slide.addShape('rect' as any, { x: cx, y, w: 0.06, h: cardH, fill: { color: this.PC.accent } })
 
       const parts = this.parseBulletParts(bullets[i])
       if (parts) {
@@ -288,16 +382,16 @@ export class ExportService {
         const titleH = cardH * 0.45
         slide.addShape('ellipse' as any, {
           x: cx + 0.18, y: y + titleH / 2 - 0.05, w: 0.1, h: 0.1,
-          fill: { color: PPT_COLORS.accent },
+          fill: { color: this.PC.accent },
         })
         slide.addText(parts.title, {
           x: cx + 0.35, y, w: cw - 0.5, h: titleH,
-          fontSize: 14, fontFace: PPT_FONT, color: PPT_COLORS.darkBg, bold: true, valign: 'middle',
+          fontSize: 14, fontFace: '黑体', color: this.PC.darkBg, bold: true, valign: 'middle',
         })
         // 分隔线
         slide.addShape('rect' as any, {
           x: cx + 0.22, y: y + titleH, w: 1.2, h: 0.015,
-          fill: { color: PPT_COLORS.accentLight },
+          fill: { color: this.PC.accentLight },
         })
         // 描述行
         const descRuns = this.parseRichTextRuns(parts.desc, 12, '555555')
@@ -307,7 +401,7 @@ export class ExportService {
         })
       } else {
         // 无标题格式：整行渲染
-        const runs = this.parseRichTextRuns(bullets[i], 14, PPT_COLORS.bodyText)
+        const runs = this.parseRichTextRuns(bullets[i], 14, this.PC.bodyText)
         slide.addText(runs as any, { x: cx + 0.22, y, w: cw - 0.35, h: cardH, valign: 'middle' })
       }
     }
@@ -324,9 +418,14 @@ export class ExportService {
     const cardH = 2.4, cardY = 0.5
     metrics.forEach((m, i) => {
       const x = cx + i * (cardW + gap)
-      slide.addShape('rect' as any, { x, y: cardY, w: cardW, h: cardH, fill: { color: PPT_COLORS.cardBg }, rectRadius: 0.1 })
-      slide.addShape('rect' as any, { x, y: cardY, w: cardW, h: 0.06, fill: { color: '3A8EF5' } })
-      slide.addText(m.value, { x, y: cardY + 0.2, w: cardW, h: 0.9, fontSize: 34, fontFace: PPT_FONT, color: '3A8EF5', bold: true, align: 'center', valign: 'middle' })
+      slide.addShape('rect' as any, { x, y: cardY, w: cardW, h: cardH, fill: { color: this.PC.cardBg }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x, y: cardY, w: cardW, h: 0.06, fill: { color: this.PC.bright } })
+      slide.addText(m.value, {
+        x, y: cardY + 0.15, w: cardW, h: 1.0,
+        fontSize: 38, fontFace: '黑体', color: this.PC.bright, bold: true,
+        align: 'center', valign: 'middle',
+        shadow: { type: 'outer', blur: 4, offset: 1, angle: 90, color: this.PC.accent, opacity: 0.25 },
+      })
       slide.addText(m.label, { x, y: cardY + 1.1, w: cardW, h: 0.5, fontSize: 13, fontFace: PPT_FONT, color: '555555', bold: true, align: 'center', valign: 'middle' })
       if (m.description) {
         slide.addText(m.description, { x: x + 0.1, y: cardY + 1.6, w: cardW - 0.2, h: 0.5, fontSize: 10, fontFace: PPT_FONT, color: '999999', align: 'center' })
@@ -335,7 +434,7 @@ export class ExportService {
     // 下方补充要点
     if (s.bullets && s.bullets.length > 0) {
       const bulletsY = cardY + cardH + 0.3
-      const items = this.makeBulletItems(s.bullets, 13, PPT_COLORS.bodyText, 10)
+      const items = this.makeBulletItems(s.bullets, 13, this.PC.bodyText, 10)
       slide.addText(items as any, { x: cx + 0.2, y: bulletsY, w: cw - 0.4, h: 7.0 - bulletsY, valign: 'top' })
     }
   }
@@ -347,25 +446,25 @@ export class ExportService {
     const colH = 6.5, colY = 0.5
     // 左栏
     if (s.left) {
-      slide.addShape('rect' as any, { x: cx, y: colY, w: colW, h: colH, fill: { color: PPT_COLORS.cardBg }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x: cx, y: colY, w: colW, h: colH, fill: { color: this.PC.cardBg }, rectRadius: 0.1 })
       // 栏头
-      slide.addShape('rect' as any, { x: cx, y: colY, w: colW, h: 0.6, fill: { color: PPT_COLORS.accent }, rectRadius: 0.1 })
-      slide.addShape('rect' as any, { x: cx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: PPT_COLORS.cardBg } })
-      slide.addText(s.left.title, { x: cx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: PPT_FONT, color: 'FFFFFF', bold: true, valign: 'middle' })
+      slide.addShape('rect' as any, { x: cx, y: colY, w: colW, h: 0.6, fill: { color: this.PC.accent }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x: cx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: this.PC.cardBg } })
+      slide.addText(s.left.title, { x: cx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: '黑体', color: 'FFFFFF', bold: true, valign: 'middle' })
       if (s.left.bullets && s.left.bullets.length > 0) {
-        const items = this.makeBulletItems(s.left.bullets, 11, PPT_COLORS.bodyText, 6)
+        const items = this.makeBulletItems(s.left.bullets, 11, this.PC.bodyText, 6)
         slide.addText(items as any, { x: cx + 0.2, y: colY + 0.75, w: colW - 0.4, h: colH - 1.0, valign: 'top' })
       }
     }
     // 右栏
     if (s.right) {
       const rx = cx + colW + 0.3
-      slide.addShape('rect' as any, { x: rx, y: colY, w: colW, h: colH, fill: { color: PPT_COLORS.cardBg }, rectRadius: 0.1 })
-      slide.addShape('rect' as any, { x: rx, y: colY, w: colW, h: 0.6, fill: { color: PPT_COLORS.teal }, rectRadius: 0.1 })
-      slide.addShape('rect' as any, { x: rx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: PPT_COLORS.cardBg } })
-      slide.addText(s.right.title, { x: rx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: PPT_FONT, color: 'FFFFFF', bold: true, valign: 'middle' })
+      slide.addShape('rect' as any, { x: rx, y: colY, w: colW, h: colH, fill: { color: this.PC.cardBg }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x: rx, y: colY, w: colW, h: 0.6, fill: { color: this.PC.teal }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x: rx, y: colY + 0.5, w: colW, h: 0.15, fill: { color: this.PC.cardBg } })
+      slide.addText(s.right.title, { x: rx + 0.15, y: colY, w: colW - 0.3, h: 0.6, fontSize: 14, fontFace: '黑体', color: 'FFFFFF', bold: true, valign: 'middle' })
       if (s.right.bullets && s.right.bullets.length > 0) {
-        const items = this.makeBulletItems(s.right.bullets, 11, PPT_COLORS.bodyText, 6)
+        const items = this.makeBulletItems(s.right.bullets, 11, this.PC.bodyText, 6)
         slide.addText(items as any, { x: rx + 0.2, y: colY + 0.75, w: colW - 0.4, h: colH - 1.0, valign: 'top' })
       }
     }
@@ -390,9 +489,9 @@ export class ExportService {
       const row = Math.floor(i / cols)
       const x = cx + col * (cardW + gap)
       const y = startY + row * (cardH + gap)
-      slide.addShape('rect' as any, { x, y, w: cardW, h: cardH, fill: { color: PPT_COLORS.cardBg }, rectRadius: 0.1 })
-      slide.addShape('rect' as any, { x, y, w: cardW, h: 0.05, fill: { color: PPT_COLORS.accent } })
-      slide.addText(c.title, { x: x + 0.12, y: y + 0.12, w: cardW - 0.24, h: 0.35, fontSize: titleFs, fontFace: PPT_FONT, color: PPT_COLORS.darkBg, bold: true })
+      slide.addShape('rect' as any, { x, y, w: cardW, h: cardH, fill: { color: this.PC.cardBg }, rectRadius: 0.1 })
+      slide.addShape('rect' as any, { x, y, w: cardW, h: 0.05, fill: { color: this.PC.accent } })
+      slide.addText(c.title, { x: x + 0.12, y: y + 0.12, w: cardW - 0.24, h: 0.35, fontSize: titleFs, fontFace: '黑体', color: this.PC.darkBg, bold: true })
       if (c.bullets && c.bullets.length > 0) {
         const plainItems = c.bullets.slice(0, rows >= 2 ? 3 : 5).map((b) => ({
           text: b.replace(/\*\*/g, ''),
@@ -415,13 +514,16 @@ export class ExportService {
     const cx = 4.2, cw = 8.6
     // 要点
     const hasBullets = s.bullets && s.bullets.length > 0
+    const tags = s.tags || []
+    const hasTags = tags.length > 0
+    // 标签区域占 0.55 + 0.3 间距 ≈ 0.85
+    const bulletEndY = hasTags ? 5.5 : 7.0
     if (hasBullets) {
-      this.renderBulletCards(slide, s.bullets!, cx, 0.5, cw)
+      this.renderBulletCards(slide, s.bullets!, cx, 0.5, cw, bulletEndY)
     }
     // 标签
-    const tags = s.tags || []
-    if (tags.length > 0) {
-      const tagColors = [PPT_COLORS.accent, PPT_COLORS.teal, 'E67E22', '8E44AD', 'E74C3C', '27AE60']
+    if (hasTags) {
+      const tagColors = [this.PC.accent, this.PC.teal, 'E67E22', '8E44AD', 'E74C3C', '27AE60']
       const gap = 0.2
       const tagW = Math.min(2.2, (cw - gap * (tags.length - 1)) / tags.length)
       const totalTW = tags.length * tagW + (tags.length - 1) * gap
@@ -436,7 +538,7 @@ export class ExportService {
     }
   }
   /** 将幻灯片 JSON 渲染为横屏 PDF（与 PPT 视觉完全一致） */
-  async toPdfSlides(data: PptData): Promise<Buffer> {
+  async toPdfSlides(data: PptData, colors?: CustomColors): Promise<Buffer> {
     if (!data || !Array.isArray(data.slides)) {
       throw new Error('无效的幻灯片数据')
     }
@@ -463,14 +565,8 @@ export class ExportService {
         const fn = fonts.normal ? 'CN' : 'Helvetica'
         const fb = fonts.bold ? 'CN-Bold' : 'Helvetica-Bold'
 
-        // 配色与 PPT 完全一致
-        const C = {
-          dark: '#1B2A4A', darkEnd: '#0f1c36',
-          accent: '#4472C4', teal: '#2CB9C5',
-          white: '#FFFFFF', text: '#333333',
-          subtitle: '#B0BEC5', gray55: '#555555', gray99: '#999999',
-          cardBg: '#F8FAFC',
-        }
+        // 根据用户自定义颜色动态生成配色
+        const C = buildPdfColors(colors)
 
         let isFirst = true
         for (const s of data.slides) {
@@ -529,12 +625,12 @@ export class ExportService {
                   const mx = cx + i * (mW + mGap)
                   doc.roundedRect(mx, mY, mW, mH, 7).fill(C.cardBg)
                   const mBarG = doc.linearGradient(mx, 0, mx + mW, 0)
-                  mBarG.stop(0, '#3A8EF5').stop(1, C.accent)
+                  mBarG.stop(0, C.bright).stop(1, C.accent)
                   doc.rect(mx, mY, mW, 4).fill(mBarG)
-                  doc.font(fb).fontSize(32).fillColor('#3A8EF5')
-                  doc.text(m.value, mx, mY + 18, { width: mW, align: 'center' })
+                  doc.font(fb).fontSize(38).fillColor(C.bright)
+                  doc.text(m.value, mx, mY + 14, { width: mW, align: 'center' })
                   doc.font(fb).fontSize(12).fillColor(C.gray55)
-                  doc.text(m.label, mx, mY + 82, { width: mW, align: 'center' })
+                  doc.text(m.label, mx, mY + 88, { width: mW, align: 'center' })
                   if (m.description) {
                     doc.font(fn).fontSize(10).fillColor(C.gray99)
                     doc.text(m.description, mx + 8, mY + 118, { width: mW - 16, align: 'center' })
@@ -556,7 +652,7 @@ export class ExportService {
                   doc.roundedRect(cx, colY, colW, colH, 7).fill(C.cardBg)
                   // 栏头
                   const lhG = doc.linearGradient(cx, colY, cx + colW, colY)
-                  lhG.stop(0, C.accent).stop(1, '#5b8bd6')
+                  lhG.stop(0, C.accent).stop(1, C.accentEnd)
                   doc.roundedRect(cx, colY, colW, 36, 7).fill(lhG)
                   doc.rect(cx, colY + 28, colW, 12).fill(C.cardBg)
                   doc.font(fb).fontSize(13).fillColor(C.white)
@@ -569,7 +665,7 @@ export class ExportService {
                   const rx = cx + colW + 14
                   doc.roundedRect(rx, colY, colW, colH, 7).fill(C.cardBg)
                   const rhG = doc.linearGradient(rx, colY, rx + colW, colY)
-                  rhG.stop(0, C.teal).stop(1, '#3dd4e0')
+                  rhG.stop(0, C.teal).stop(1, C.tealEnd)
                   doc.roundedRect(rx, colY, colW, 36, 7).fill(rhG)
                   doc.rect(rx, colY + 28, colW, 12).fill(C.cardBg)
                   doc.font(fb).fontSize(13).fillColor(C.white)
@@ -620,18 +716,22 @@ export class ExportService {
               {
                 const sideW = this.pdfSidebar(doc, s.title, W, H, fn, fb, C)
                 const cx = sideW + 18, cw = W - sideW - 36
-                if (s.bullets?.length) {
-                  this.pdfBulletCards(doc, s.bullets, cx, 18, cw, 340, fn, fb, 14, C)
-                }
                 const tags = s.tags || []
-                if (tags.length > 0) {
+                const hasTags = tags.length > 0
+                // 标签区域高度 38 + 间距 20
+                const tagAreaH = hasTags ? 58 : 0
+                const bulletMaxH = H - 18 - 22 - tagAreaH
+                if (s.bullets?.length) {
+                  this.pdfBulletCards(doc, s.bullets, cx, 18, cw, bulletMaxH, fn, fb, 14, C)
+                }
+                if (hasTags) {
                   const tagColors = [C.accent, C.teal, '#E67E22', '#8E44AD', '#E74C3C', '#27AE60']
-                  const tagColorsEnd = ['#5b8bd6', '#3dd4e0', '#f0993c', '#a35bc4', '#f06b5e', '#3cc975']
+                  const tagColorsEnd = [C.accentEnd, C.tealEnd, '#f0993c', '#a35bc4', '#f06b5e', '#3cc975']
                   const tGap = 14
                   const tW = Math.min(150, (cw - tGap * (tags.length - 1)) / tags.length)
                   const totalTW = tags.length * tW + (tags.length - 1) * tGap
                   const sx = cx + (cw - totalTW) / 2
-                  const tY = s.bullets?.length ? 390 : 200
+                  const tY = s.bullets?.length ? (18 + bulletMaxH + 12) : 200
                   tags.forEach((tag, i) => {
                     const tx = sx + i * (tW + tGap)
                     const tgG = doc.linearGradient(tx, tY, tx + tW, tY + 38)
@@ -667,7 +767,7 @@ export class ExportService {
     const sideW = Math.round(W * 0.28)
     // 侧栏渐变背景
     const sideGrad = doc.linearGradient(0, 0, 0, H)
-    sideGrad.stop(0, '#0a1628').stop(0.5, C.dark).stop(1, '#243b6a')
+    sideGrad.stop(0, C.darkDeep).stop(0.5, C.dark).stop(1, C.darkLight)
     doc.rect(0, 0, sideW, H).fill(sideGrad)
     // 装饰圆环
     doc.circle(sideW + 10, -20, 80).lineWidth(1.5).strokeOpacity(0.1).stroke(C.accent)
@@ -678,7 +778,7 @@ export class ExportService {
     const iconCx = sideW / 2
     const iconCy = H * 0.32
     const iconGrad = doc.linearGradient(iconCx - iconR, iconCy - iconR, iconCx + iconR, iconCy + iconR)
-    iconGrad.stop(0, C.accent).stop(1, '#5b8bd6')
+    iconGrad.stop(0, C.accent).stop(1, C.accentEnd)
     doc.circle(iconCx, iconCy, iconR).fill(iconGrad)
     // 图标字符（标题首字）
     doc.font(fb).fontSize(22).fillColor(C.white)
@@ -696,85 +796,90 @@ export class ExportService {
     return sideW
   }
 
-  /** PDF 幻灯片：渲染卡片式要点列表（左侧强调条 + 小标题独立展示） */
+  /** PDF 幻灯片：渲染卡片式要点列表（左侧强调条 + 小标题独立展示，自动填满可用空间） */
   private pdfBulletCards(
     doc: any, bullets: string[], x: number, y: number, w: number, maxH: number,
     fn: string, fb: string, fontSize: number, C: any,
   ) {
-    let curY = y
     const pad = 7
     const gap = 5
     const barW = 4
     const textX = x + barW + pad + 2
     const textW = w - barW - pad * 2 - 2
+    const count = bullets.length
 
+    // 均分可用高度，确保卡片填满空间
+    const minCardH = (maxH - gap * (count - 1)) / count
+
+    // 第一步：预计算每张卡片的内容高度和解析结果
+    const cardInfos: Array<{ parts: { title: string; desc: string } | null; contentH: number }> = []
     for (const b of bullets) {
-      if (curY > y + maxH - 20) break
-
       const parts = this.parseBulletParts(b)
+      let contentH: number
+      if (parts) {
+        doc.font(fb).fontSize(fontSize)
+        const titleH = doc.heightOfString(parts.title, { width: textW - 14, lineGap: 2 })
+        doc.font(fn).fontSize(fontSize - 2)
+        const descH = doc.heightOfString(parts.desc.replace(/\*\*/g, ''), { width: textW, lineGap: 3 })
+        contentH = pad + titleH + 6 + descH + pad
+      } else {
+        const plainText = b.replace(/\*\*/g, '')
+        doc.font(fn).fontSize(fontSize)
+        contentH = doc.heightOfString(plainText, { width: textW, lineGap: 3 }) + pad * 2
+      }
+      cardInfos.push({ parts, contentH })
+    }
+
+    // 第二步：渲染，每张卡片取 max(内容高度, 均分高度)
+    let curY = y
+    for (let i = 0; i < count; i++) {
+      const { parts, contentH } = cardInfos[i]
+      const cardH = Math.max(contentH, minCardH)
+
+      // 卡片背景
+      doc.roundedRect(x + barW, curY, w - barW, cardH, 4).fill('#F0F4F9')
+      // 左侧渐变强调条
+      const barG = doc.linearGradient(x, curY, x, curY + cardH)
+      barG.stop(0, C.accent).stop(1, C.teal)
+      doc.rect(x, curY, barW, cardH).fill(barG)
+
+      // 内容垂直居中偏移
+      const vOffset = Math.max(0, (cardH - contentH) / 2)
 
       if (parts) {
-        // 有小标题格式：拆分为标题行 + 分隔线 + 描述行
         const titleFontSize = fontSize
         const descFontSize = fontSize - 2
-        doc.font(fb).fontSize(titleFontSize)
-        const titleH = doc.heightOfString(parts.title, { width: textW - 14, lineGap: 2 })
-        doc.font(fn).fontSize(descFontSize)
-        const descH = doc.heightOfString(parts.desc.replace(/\*\*/g, ''), { width: textW, lineGap: 3 })
-        const sepH = 6 // 分隔线区域高度
-        const cardH = Math.max(pad + titleH + sepH + descH + pad, 36)
-
-        // 卡片背景
-        doc.roundedRect(x + barW, curY, w - barW, cardH, 4).fill('#F0F4F9')
-        // 左侧渐变强调条
-        const barG = doc.linearGradient(x, curY, x, curY + cardH)
-        barG.stop(0, C.accent).stop(1, C.teal)
-        doc.rect(x, curY, barW, cardH).fill(barG)
-
-        // 小标题行（带圆点指示器）
-        const titleY = curY + pad
+        // 小标题行
+        const titleY = curY + vOffset + pad
         const dotGrad = doc.linearGradient(textX - 2, titleY + titleFontSize * 0.3, textX + 6, titleY + titleFontSize * 0.3 + 4)
         dotGrad.stop(0, C.accent).stop(1, C.teal)
         doc.circle(textX + 2, titleY + titleFontSize * 0.4, 3).fill(dotGrad)
         doc.font(fb).fontSize(titleFontSize).fillColor(C.dark)
         doc.text(parts.title, textX + 12, titleY, { width: textW - 14, lineGap: 2 })
-
         // 分隔线
+        doc.font(fb).fontSize(titleFontSize)
+        const titleH = doc.heightOfString(parts.title, { width: textW - 14, lineGap: 2 })
         const sepY = titleY + titleH + 2
         const sepGrad = doc.linearGradient(textX, sepY, textX + 70, sepY)
         sepGrad.stop(0, C.accent).stop(0.6, C.teal).stop(1, '#F0F4F9')
         doc.rect(textX, sepY, 70, 1.2).fill(sepGrad)
-
         // 描述行
-        const descY = sepY + sepH
+        const descY = sepY + 6
         doc.fillColor(C.gray55 || '#555555')
         this.renderRichText(doc, parts.desc, fn, fb, descFontSize, textX, descY, textW)
-
-        curY += cardH + gap
       } else {
-        // 无标题格式：整行渲染
-        const plainText = b.replace(/\*\*/g, '')
-        doc.font(fn).fontSize(fontSize)
-        const textH = doc.heightOfString(plainText, { width: textW, lineGap: 3 })
-        const cardH = Math.max(textH + pad * 2, 24)
-        // 卡片背景
-        doc.roundedRect(x + barW, curY, w - barW, cardH, 4).fill('#F0F4F9')
-        // 左侧渐变强调条
-        const barG = doc.linearGradient(x, curY, x, curY + cardH)
-        barG.stop(0, C.accent).stop(1, C.teal)
-        doc.rect(x, curY, barW, cardH).fill(barG)
-        // 渲染文本
         doc.fillColor(C.text)
-        this.renderRichText(doc, b, fn, fb, fontSize, textX, curY + pad, textW)
-        curY += cardH + gap
+        this.renderRichText(doc, bullets[i], fn, fb, fontSize, textX, curY + vOffset + pad, textW)
       }
+
+      curY += cardH + gap
     }
   }
 
   /** PDF 幻灯片：渐变深色背景（含装饰元素） */
   private pdfDarkBg(doc: any, W: number, H: number, C: any, full = true) {
     const grad = doc.linearGradient(0, 0, W, H)
-    grad.stop(0, '#0a1628').stop(0.4, C.dark).stop(1, '#243b6a')
+    grad.stop(0, C.darkDeep).stop(0.4, C.dark).stop(1, C.darkLight)
     doc.rect(0, 0, W, H).fill(grad)
     // 左上角装饰圆环
     doc.circle(-60, -60, 200).lineWidth(1.5).strokeOpacity(0.12).stroke(C.accent)

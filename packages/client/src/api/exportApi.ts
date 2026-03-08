@@ -133,12 +133,18 @@ export function generateSlides(
   return () => controller.abort()
 }
 
+/** 自定义配色 */
+export interface CustomColors {
+  themeColor: string
+  highlightColor: string
+}
+
 /** 确认导出：发送幻灯片 JSON 到后端生成 PPTX 并下载 */
-export async function downloadPptx(slidesData: PptData, filename = 'work-summary') {
+export async function downloadPptx(slidesData: PptData, filename = 'work-summary', colors?: CustomColors) {
   const response = await fetch('/api/v1/export/pptx', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slidesData, filename }),
+    body: JSON.stringify({ slidesData, filename, colors }),
   })
 
   if (!response.ok) {
@@ -150,11 +156,11 @@ export async function downloadPptx(slidesData: PptData, filename = 'work-summary
 }
 
 /** 确认导出：发送幻灯片 JSON 到后端生成 PDF 并下载（与 PPT 视觉一致） */
-export async function downloadPdfSlides(slidesData: PptData, filename = 'work-summary') {
+export async function downloadPdfSlides(slidesData: PptData, filename = 'work-summary', colors?: CustomColors) {
   const response = await fetch('/api/v1/export/pdf-slides', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slidesData, filename }),
+    body: JSON.stringify({ slidesData, filename, colors }),
   })
 
   if (!response.ok) {
