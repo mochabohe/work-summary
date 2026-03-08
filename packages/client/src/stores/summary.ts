@@ -146,14 +146,19 @@ export const useSummaryStore = defineStore('summary', () => {
     feishuDocs.value.splice(index, 1)
   }
 
-  function reset() {
+  /** 清除生成结果（保留用户偏好设置） */
+  function clearGenerated() {
     generating.value = false
     content.value = ''
+    versions.value = []
+    chatMessages.value = []
+  }
+
+  function reset() {
+    clearGenerated()
     customPrompt.value = ''
     businessContext.value = ''
     feishuDocs.value = []
-    versions.value = []
-    chatMessages.value = []
     docType.value = 'yearly-summary'
     audience.value = 'manager'
     tone.value = 'professional'
@@ -184,6 +189,7 @@ export const useSummaryStore = defineStore('summary', () => {
     replaceSection,
     addFeishuDoc,
     removeFeishuDoc,
+    clearGenerated,
     reset,
   }
 })

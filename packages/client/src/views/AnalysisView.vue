@@ -6,13 +6,20 @@
     </el-empty>
 
     <template v-else>
-      <!-- 分析按钮 -->
-      <el-card v-if="!projectStore.analyzing && !allSelectedAnalyzed">
+      <!-- 分析按钮（有项目时显示） -->
+      <el-card v-if="projectStore.selectedProjects.size > 0 && !projectStore.analyzing && !allSelectedAnalyzed">
         <div class="analyze-prompt">
           <p>已选择 {{ projectStore.selectedProjects.size }} 个项目，点击开始深度分析</p>
           <el-button type="primary" size="large" @click="startAnalysis" :loading="projectStore.analyzing">
             开始分析
           </el-button>
+        </div>
+      </el-card>
+
+      <!-- 无项目时提示（仅有独立文档） -->
+      <el-card v-if="projectStore.selectedProjects.size === 0 && !projectStore.analyzing">
+        <div class="analyze-prompt">
+          <p>已扫描到 {{ projectStore.scanResult?.standaloneDocuments?.length || 0 }} 份独立文档，无 Git 项目需要分析，可直接进入下一步</p>
         </div>
       </el-card>
 
@@ -127,10 +134,10 @@
       </div>
 
       <!-- 操作栏 -->
-      <div v-if="projectStore.analyses.size > 0" class="action-bar">
+      <div v-if="allSelectedAnalyzed" class="action-bar">
         <el-button @click="router.push('/scan')">返回扫描</el-button>
         <el-button type="primary" size="large" @click="router.push('/feishu')">
-          下一步：补充文档
+          下一步：补充材料
         </el-button>
       </div>
     </template>
@@ -164,9 +171,9 @@ const selectedAnalyses = computed(() => {
   return result
 })
 
-/** 检查所有选中的项目是否都已分析完成 */
+/** 检查所有选中的项目是否都已分析完成（无项目时视为完成） */
 const allSelectedAnalyzed = computed(() => {
-  if (projectStore.selectedProjects.size === 0) return false
+  if (projectStore.selectedProjects.size === 0) return true
   for (const path of projectStore.selectedProjects) {
     if (!projectStore.analyses.has(path)) return false
   }

@@ -120,8 +120,11 @@
       <div class="action-bar">
         <span class="selected-count">
           已选择 {{ projectStore.selectedProjects.size }} / {{ projectStore.scanResult.projects.length }} 个项目
+          <template v-if="projectStore.scanResult.standaloneDocuments?.length">
+            ，{{ projectStore.scanResult.standaloneDocuments.length }} 份独立文档
+          </template>
         </span>
-        <el-button type="primary" size="large" @click="goAnalysis" :disabled="projectStore.selectedProjects.size === 0">
+        <el-button type="primary" size="large" @click="goAnalysis" :disabled="projectStore.selectedProjects.size === 0 && !(projectStore.scanResult.standaloneDocuments?.length)">
           下一步：分析项目
         </el-button>
       </div>
@@ -187,6 +190,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useSettingsStore } from '@/stores/settings'
+import { useSummaryStore } from '@/stores/summary'
 import { startScan as apiStartScan, listenScanProgress, getScanResult } from '@/api/scan'
 import { browseDir, getShortcuts } from '@/api/fs'
 import type { ScanProgressEvent } from '@work-summary/shared'
@@ -195,6 +199,7 @@ import type { DirEntry, Shortcut } from '@/api/fs'
 const router = useRouter()
 const projectStore = useProjectStore()
 const settings = useSettingsStore()
+const summaryStore = useSummaryStore()
 
 const folderPaths = ref<string[]>([])
 const currentPath = ref('')
@@ -277,6 +282,9 @@ async function startScan() {
 
   projectStore.scanning = true
   progressInfo.value = null
+  // 新扫描时立即清除旧的生成结果和分析数据
+  summaryStore.clearGenerated()
+  projectStore.analyses = new Map()
 
   try {
     const { taskId } = await apiStartScan(folderPaths.value, settings.gitAuthor, settings.getGitSince(), settings.getGitUntil())

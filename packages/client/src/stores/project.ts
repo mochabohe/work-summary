@@ -55,6 +55,8 @@ export const useProjectStore = defineStore('project', () => {
   /** 设置扫描结果，默认只选中有个人贡献的项目 */
   function setScanResult(result: ScanResult) {
     scanResult.value = result
+    // 清除旧的分析结果
+    analyses.value = new Map()
     // 只自动选中有用户 Git 贡献的项目（userCommitCount > 0 或未检测的非 Git 项目）
     const selected = result.projects
       .filter((p) => !p.hasGit || p.userCommitCount === undefined || p.userCommitCount > 0)

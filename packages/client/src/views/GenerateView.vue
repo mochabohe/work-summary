@@ -297,7 +297,7 @@
         <!-- 右侧: 生成结果预览 / 大纲编辑 -->
         <el-col :span="14">
           <!-- 大纲编辑视图 -->
-          <el-card v-if="outline.length > 0 && !summaryStore.content" class="preview-card outline-card">
+          <el-card v-if="outline.length > 0 && !summaryStore.generating" class="preview-card outline-card">
             <template #header>
               <div class="preview-header">
                 <div class="preview-header-left">
@@ -329,6 +329,9 @@
 
             <div class="outline-actions">
               <el-button @click="outline = []">放弃大纲</el-button>
+              <el-button @click="compareFromOutline" :disabled="summaryStore.generating">
+                对比生成 (2种风格)
+              </el-button>
               <el-button type="primary" @click="generateFromOutline" :loading="summaryStore.generating">
                 基于大纲生成全文
               </el-button>
@@ -791,6 +794,8 @@ const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.v
 
 const canGenerate = computed(() => {
   return projectStore.analyses.size > 0
+    || (projectStore.scanResult?.standaloneDocuments?.length ?? 0) > 0
+    || summaryStore.feishuDocs.length > 0
 })
 
 function addDimension(dim: string) {
@@ -897,6 +902,57 @@ function generateCompare() {
         compareGenerating[s.key] = false
 
         if (!compareGenerating['formal'] && !compareGenerating['semi-formal']) {
+          ElMessage.success('两个版本全部生成完成，请选择满意的版本')
+        }
+      },
+      (err) => {
+        compareGenerating[s.key] = false
+        ElMessage.error(`「${s.label}」生成失败: ${err}`)
+      },
+      (progress) => {
+        compareProgress[s.key] = progress
+      },
+    )
+    compareAborts.push(abort)
+  }
+}
+
+/** 基于大纲对比生成两种风格 */
+function compareFromOutline() {
+  const validOutline = outline.value
+    .filter(item => item.title.trim())
+    .map(item => ({ ...item, points: item.points.filter(p => p.trim()) }))
+
+  if (validOutline.length === 0) {
+    ElMessage.warning('大纲为空，请至少添加一个章节')
+    return
+  }
+
+  compareActive.value = true
+  for (const s of styleOptions) {
+    compareContents[s.key] = ''
+    compareGenerating[s.key] = true
+    compareProgress[s.key] = ''
+    compareEditMode[s.key] = false
+  }
+  compareAborts.length = 0
+
+  for (const s of styleOptions) {
+    const abort = streamFromOutline(
+      {
+        ...buildGenerateRequest(),
+        style: s.key as 'formal' | 'semi-formal',
+        outline: validOutline,
+      },
+      (chunk) => {
+        compareContents[s.key] += chunk
+      },
+      () => {
+        compareContents[s.key] = cleanAIOutput(compareContents[s.key])
+        compareGenerating[s.key] = false
+
+        if (!compareGenerating['formal'] && !compareGenerating['semi-formal']) {
+          outline.value = []
           ElMessage.success('两个版本全部生成完成，请选择满意的版本')
         }
       },
@@ -1124,6 +1180,8 @@ function generateOutline() {
   outlineGenerating.value = true
   outline.value = []
   generateProgress.value = ''
+  // 清除旧正文，切换到大纲模式
+  summaryStore.content = ''
 
   streamGenerateOutline(
     buildGenerateRequest(),
