@@ -99,6 +99,7 @@ export class ParserService {
     entryFiles: string[]
     modules: string[]
     dependencies: Record<string, string>
+    keyFiles: { path: string; content: string }[]
   }> {
     const entryFiles: string[] = []
     const modules: string[] = []
@@ -143,7 +144,120 @@ export class ParserService {
       } catch {}
     } catch {}
 
-    return { entryFiles, modules, dependencies }
+    // 提取关键代码文件摘要
+    const keyFiles = await this.findKeyFiles(projectPath)
+
+    return { entryFiles, modules, dependencies, keyFiles }
+  }
+
+  /** 关键文件探测列表：路径候选 + 描述 */
+  private static KEY_FILE_CANDIDATES = [
+    // 路由文件 — 揭示页面/功能结构
+    'src/router/index.ts', 'src/router/index.js',
+    'src/router.ts', 'src/router.js',
+    'src/routes/index.ts', 'src/routes/index.js',
+    'src/routes.ts', 'src/routes.js',
+    'app/router.ts', 'app/routes.ts',
+    // API 定义文件 — 揭示后端接口和业务领域
+    'src/api/index.ts', 'src/api/index.js',
+    'src/services/api.ts', 'src/services/api.js',
+    'src/api.ts',
+    // 状态管理 — 揭示数据模型
+    'src/store/index.ts', 'src/store/index.js',
+    'src/stores/index.ts', 'src/stores/index.js',
+    // 数据库模型（后端项目）
+    'src/models/index.ts', 'src/models/index.js',
+    'prisma/schema.prisma',
+    // 配置文件 — 揭示项目类型和构建方式
+    'nuxt.config.ts', 'nuxt.config.js',
+    'next.config.ts', 'next.config.js', 'next.config.mjs',
+  ]
+
+  /** 页面/视图目录候选（只提取文件名列表） */
+  private static PAGE_DIR_CANDIDATES = [
+    'src/pages', 'src/views', 'src/screens',
+    'app/pages', 'pages',
+  ]
+
+  /** 每个文件最多读取的行数 */
+  private static KEY_FILE_MAX_LINES = 150
+
+  /** 最多提取的关键文件数（不含页面目录列表） */
+  private static KEY_FILE_MAX_COUNT = 6
+
+  /** 提取关键代码文件内容摘要 */
+  private async findKeyFiles(projectPath: string): Promise<{ path: string; content: string }[]> {
+    const result: { path: string; content: string }[] = []
+
+    // 1. 探测关键文件并读取内容
+    for (const relPath of ParserService.KEY_FILE_CANDIDATES) {
+      if (result.length >= ParserService.KEY_FILE_MAX_COUNT) break
+
+      try {
+        const fullPath = path.join(projectPath, relPath)
+        const stat = await fs.stat(fullPath)
+        // 跳过超过 50KB 的文件
+        if (stat.size > 50 * 1024) continue
+
+        const content = await fs.readFile(fullPath, 'utf-8')
+        const lines = content.split('\n')
+        const truncated = lines.slice(0, ParserService.KEY_FILE_MAX_LINES).join('\n')
+
+        if (truncated.trim().length > 0) {
+          result.push({ path: relPath, content: truncated })
+        }
+      } catch {
+        // 文件不存在，跳过
+      }
+    }
+
+    // 2. 提取页面/视图目录的文件名列表
+    for (const dirRel of ParserService.PAGE_DIR_CANDIDATES) {
+      try {
+        const dirPath = path.join(projectPath, dirRel)
+        const entries = await fs.readdir(dirPath, { withFileTypes: true })
+        const fileNames = entries
+          .filter(e => !EXCLUDED_DIRS.includes(e.name as any) && !e.name.startsWith('.'))
+          .map(e => e.isDirectory() ? `${e.name}/` : e.name)
+          .sort()
+
+        if (fileNames.length > 0) {
+          result.push({
+            path: `${dirRel}/ (文件列表)`,
+            content: fileNames.join(', '),
+          })
+          break // 只取第一个存在的页面目录
+        }
+      } catch {
+        // 目录不存在，跳过
+      }
+    }
+
+    // 3. 探测 API 目录下的所有文件列表（补充了解接口模块划分）
+    const apiDirs = ['src/api', 'src/services']
+    for (const dirRel of apiDirs) {
+      try {
+        const dirPath = path.join(projectPath, dirRel)
+        const entries = await fs.readdir(dirPath, { withFileTypes: true })
+        const fileNames = entries
+          .filter(e => e.isFile() && !e.name.startsWith('.'))
+          .map(e => e.name)
+          .sort()
+
+        if (fileNames.length > 1) {
+          // 只有多个文件时才有价值列出（单文件已在上面读取内容了）
+          const existing = result.find(r => r.path === `${dirRel}/ (文件列表)`)
+          if (!existing) {
+            result.push({
+              path: `${dirRel}/ (文件列表)`,
+              content: fileNames.join(', '),
+            })
+          }
+        }
+      } catch {}
+    }
+
+    return result
   }
 
   /**

@@ -434,6 +434,26 @@ export class PromptBuilder {
       if (Object.keys(cs.dependencies).length > 0) {
         parts.push(`#### 主要依赖: ${Object.keys(cs.dependencies).slice(0, compact ? 20 : 30).join(', ')}`)
       }
+
+      // 关键代码文件摘要（帮助AI理解项目业务）
+      if (cs.keyFiles && cs.keyFiles.length > 0) {
+        const maxFiles = compact ? 5 : 8
+        const maxContentLen = compact ? 800 : 1500
+        const filesToShow = cs.keyFiles.slice(0, maxFiles)
+        parts.push(`\n#### 关键代码文件（用于理解项目业务）`)
+        for (const kf of filesToShow) {
+          parts.push(`\n##### ${kf.path}`)
+          if (kf.path.includes('文件列表')) {
+            // 目录文件列表，直接展示
+            parts.push(this.limitText(kf.content, maxContentLen))
+          } else {
+            // 代码文件，用代码块包裹
+            parts.push('```')
+            parts.push(this.limitText(kf.content, maxContentLen))
+            parts.push('```')
+          }
+        }
+      }
     }
 
     if (project.documents.length > 0) {

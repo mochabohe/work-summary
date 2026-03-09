@@ -64,6 +64,8 @@ export interface ProjectAnalysis {
     entryFiles: string[]
     modules: string[]
     dependencies: Record<string, string>
+    /** 关键代码文件摘要（路由、API、页面列表等，用于理解项目业务） */
+    keyFiles: { path: string; content: string }[]
   }
 }
 
