@@ -39,18 +39,57 @@ const FILE_TYPE_WEIGHTS: { pattern: RegExp; weight: number; label: string }[] = 
   { pattern: /\.(ts|js|vue|tsx|jsx|py|go|rs|java|kt|swift|rb|php|c|cpp|h)$/i, weight: 1.0, label: '核心代码' },
 ]
 
-/** Commit 类型权重 */
-const COMMIT_TYPE_WEIGHTS: Record<string, { weight: number; category: keyof ContributionScore['breakdown'] }> = {
-  feat: { weight: 1.0, category: 'featureWork' },
-  feature: { weight: 1.0, category: 'featureWork' },
-  add: { weight: 0.9, category: 'featureWork' },
-  perf: { weight: 0.9, category: 'featureWork' },
+/**
+ * 基于内容的分类规则（按优先级排列）
+ * 核心思路：不信任 commit 前缀，分析消息实际内容来判断工作类型
+ * 规则按优先级从高到低排列，先匹配到的优先
+ */
+const CONTENT_RULES: { patterns: RegExp[]; category: keyof ContributionScore['breakdown']; weight: number }[] = [
+  // bugFix：修复类关键词（优先级最高，避免 "feat: 修复xxx" 被误判为功能开发）
+  {
+    patterns: [
+      /修复|修正|解决|fix|bug|缺陷|故障|异常|崩溃|闪退|白屏|报错|错误处理/i,
+      /问题|兼容性|适配|回退|降级|hotfix|patch/i,
+    ],
+    category: 'bugFix',
+    weight: 0.8,
+  },
+  // refactoring：重构/优化类
+  {
+    patterns: [
+      /重构|refactor|优化|性能|提升|改进|迁移|升级|改造|拆分|抽取|封装/i,
+      /perf|调整架构|代码整理|简化|精简|统一|规范化/i,
+    ],
+    category: 'refactoring',
+    weight: 0.7,
+  },
+  // maintenance：维护类
+  {
+    patterns: [
+      /文档|注释|doc|readme|changelog|样式调整|格式化|lint|eslint/i,
+      /配置|config|依赖|升级版本|更新版本|merge|合并|chore|ci|cd|部署|发布|release/i,
+      /测试|test|spec|删除|移除|清理|revert|回滚/i,
+    ],
+    category: 'maintenance',
+    weight: 0.3,
+  },
+  // featureWork：新功能（放最后，作为默认分类）
+  {
+    patterns: [
+      /新增|添加|实现|开发|新建|创建|接入|集成|支持|完成|搭建|引入/i,
+      /功能|模块|页面|组件|接口|feature|add|implement|support/i,
+    ],
+    category: 'featureWork',
+    weight: 1.0,
+  },
+]
+
+/** 可信的 commit 前缀（只有这些非 feat 前缀才参考） */
+const TRUSTED_PREFIXES: Record<string, { weight: number; category: keyof ContributionScore['breakdown'] }> = {
   fix: { weight: 0.8, category: 'bugFix' },
   hotfix: { weight: 0.8, category: 'bugFix' },
   bugfix: { weight: 0.8, category: 'bugFix' },
   refactor: { weight: 0.7, category: 'refactoring' },
-  optimize: { weight: 0.7, category: 'refactoring' },
-  style: { weight: 0.3, category: 'maintenance' },
   docs: { weight: 0.3, category: 'maintenance' },
   chore: { weight: 0.3, category: 'maintenance' },
   build: { weight: 0.3, category: 'maintenance' },
@@ -72,23 +111,35 @@ function getFileWeight(filePath: string): { weight: number; label: string } {
 }
 
 /**
- * 从 commit message 提取类型和对应权重
+ * 从 commit message 分析实际工作类型
+ *
+ * 策略：优先分析消息内容关键词，不信任 feat 前缀
+ * 例如 "feat: 修复登录白屏" → bugFix（而非 featureWork）
+ * 例如 "feat: 重构用户模块" → refactoring（而非 featureWork）
  */
 function getCommitTypeInfo(message: string): { weight: number; category: keyof ContributionScore['breakdown'] } {
-  const match = message.match(/^(\w+)/)
-  if (match) {
-    const type = match[1].toLowerCase()
-    if (COMMIT_TYPE_WEIGHTS[type]) {
-      return COMMIT_TYPE_WEIGHTS[type]
+  // 去掉前缀部分，提取实际描述内容
+  const body = message.replace(/^(\w+)(\(.+?\))?[!:]?\s*/, '')
+
+  // 1. 优先用内容关键词匹配（遍历规则，先匹配到的优先级高）
+  for (const rule of CONTENT_RULES) {
+    for (const pattern of rule.patterns) {
+      if (pattern.test(body)) {
+        return { weight: rule.weight, category: rule.category }
+      }
     }
   }
 
-  // 尝试中文关键词匹配
-  if (/新增|添加|实现|开发/.test(message)) return { weight: 0.9, category: 'featureWork' }
-  if (/修复|修正|解决|bug/i.test(message)) return { weight: 0.8, category: 'bugFix' }
-  if (/重构|优化|调整|改进/.test(message)) return { weight: 0.7, category: 'refactoring' }
-  if (/文档|注释|样式|格式/.test(message)) return { weight: 0.3, category: 'maintenance' }
+  // 2. 内容无法判断时，参考非 feat 的可信前缀
+  const prefixMatch = message.match(/^(\w+)/)
+  if (prefixMatch) {
+    const prefix = prefixMatch[1].toLowerCase()
+    if (TRUSTED_PREFIXES[prefix]) {
+      return TRUSTED_PREFIXES[prefix]
+    }
+  }
 
+  // 3. 兜底：无法判断类型时归为功能开发
   return { weight: 0.5, category: 'featureWork' }
 }
 

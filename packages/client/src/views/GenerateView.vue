@@ -1004,8 +1004,16 @@ function getCompareStats(styleKey: string) {
   return { chars, sections }
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-*]\s+/gm, '- ')
+}
+
 function copyCompareContent(styleKey: string) {
-  navigator.clipboard.writeText(compareContents[styleKey])
+  navigator.clipboard.writeText(stripMarkdown(compareContents[styleKey]))
   ElMessage.success('已复制到剪贴板')
 }
 
@@ -1106,7 +1114,7 @@ async function handleRollback(index: number) {
 }
 
 function copyContent() {
-  navigator.clipboard.writeText(summaryStore.content)
+  navigator.clipboard.writeText(stripMarkdown(summaryStore.content))
   ElMessage.success('已复制到剪贴板')
 }
 
