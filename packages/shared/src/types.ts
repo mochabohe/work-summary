@@ -51,6 +51,80 @@ export interface DocumentContent {
   content: string
 }
 
+/** Commit 聚类结果 */
+export interface CommitCluster {
+  /** 自动生成的分类名 */
+  category: string
+  /** 该分类的关键词 */
+  keywords: string[]
+  /** 属于该分类的 commit 消息 */
+  messages: string[]
+  /** 消息数量 */
+  count: number
+}
+
+/** 贡献度评分 */
+export interface ContributionScore {
+  /** 总分（0-100 归一化） */
+  totalScore: number
+  /** 工作类型占比分解 */
+  breakdown: {
+    featureWork: number
+    bugFix: number
+    refactoring: number
+    maintenance: number
+  }
+  /** 贡献最大的领域 */
+  topContributions: { area: string; score: number }[]
+  /** 代码翻转率 */
+  codeChurnRate: number
+}
+
+/** 工作模式阶段 */
+export interface WorkPatternPhase {
+  type: 'sprint' | 'steady' | 'low'
+  startDate: string
+  endDate: string
+  totalCommits: number
+  avgDailyCommits: number
+  peakDate: string
+  peakCount: number
+}
+
+/** 工作模式分析结果 */
+export interface WorkPattern {
+  phases: WorkPatternPhase[]
+  summary: {
+    totalDays: number
+    activeDays: number
+    avgDailyCommits: number
+    mostProductiveDay: string
+    longestStreak: number
+  }
+}
+
+/** 文本质量评分 */
+export interface TextQualityScore {
+  totalScore: number
+  dimensions: {
+    infoDensity: { score: number; detail: string }
+    clicheRate: { score: number; detail: string; found: string[] }
+    structure: { score: number; detail: string }
+    dataConsistency: { score: number; detail: string }
+  }
+  suggestions: string[]
+}
+
+/** 算法分析洞察 */
+export interface AlgorithmInsights {
+  /** Commit 智能分类聚类结果 */
+  commitClusters?: CommitCluster[]
+  /** 贡献度评分 */
+  contributionScore?: ContributionScore
+  /** 工作模式分析 */
+  workPattern?: WorkPattern
+}
+
 /** 项目分析结果 */
 export interface ProjectAnalysis {
   /** 项目信息 */
@@ -67,6 +141,8 @@ export interface ProjectAnalysis {
     /** 关键代码文件摘要（路由、API、页面列表等，用于理解项目业务） */
     keyFiles: { path: string; content: string }[]
   }
+  /** 算法分析洞察 */
+  algorithmInsights?: AlgorithmInsights
 }
 
 /** 扫描进度事件 */

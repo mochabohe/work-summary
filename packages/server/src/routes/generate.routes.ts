@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { LLMService } from '../services/llm/index.js'
 import { PromptBuilder } from '../services/llm/prompt-builder.js'
-import type { GenerateRequest } from '@work-summary/shared'
+import { scoreTextQuality } from '../services/algorithm/index.js'
+import type { GenerateRequest, GitStats, ApiResponse, TextQualityScore } from '@work-summary/shared'
 
 /**
  * 修复被截断的 JSON 字符串。
@@ -471,5 +472,23 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
       clearInterval(heartbeat)
       reply.raw.end()
     }
+  })
+
+  // 文本质量评分接口
+  app.post<{
+    Body: {
+      text: string
+      gitStats?: GitStats
+    }
+  }>('/quality-score', async (request, reply) => {
+    const { text, gitStats } = request.body
+
+    if (!text || text.trim().length === 0) {
+      return reply.status(400).send({ success: false, error: '文本内容不能为空' })
+    }
+
+    const result = scoreTextQuality(text, gitStats)
+    const response: ApiResponse<TextQualityScore> = { success: true, data: result }
+    return reply.send(response)
   })
 }

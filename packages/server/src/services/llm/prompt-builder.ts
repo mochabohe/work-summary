@@ -418,10 +418,102 @@ export class PromptBuilder {
       parts.push(`- 删除代码行: ${gs.linesDeleted}`)
       parts.push(`- 开发周期: ${gs.firstCommitDate} ~ ${gs.lastCommitDate}`)
 
-      if (gs.commitMessages.length > 0) {
+      // 优先使用算法聚类结果展示提交记录
+      const ai = project.algorithmInsights
+      if (ai?.commitClusters && ai.commitClusters.length > 0) {
+        parts.push(`\n#### 提交分析（算法聚类结果，共${gs.commitMessages.length}条）`)
+        const maxClusters = compact ? 6 : 12
+        for (const cluster of ai.commitClusters.slice(0, maxClusters)) {
+          parts.push(`\n##### ${cluster.category} (${cluster.count}条)`)
+          const maxMsgs = compact ? 5 : 10
+          for (const msg of cluster.messages.slice(0, maxMsgs)) {
+            parts.push(`- ${msg}`)
+          }
+          if (cluster.messages.length > maxMsgs) {
+            parts.push(`- ... 还有${cluster.messages.length - maxMsgs}条`)
+          }
+        }
+      } else if (gs.commitMessages.length > 0) {
+        // 无聚类结果时回退到原始列表
         parts.push(`\n#### 提交记录 (共${gs.commitMessages.length}条，去重后)`)
         for (const msg of gs.commitMessages.slice(0, compact ? 40 : 120)) {
           parts.push(`- ${msg}`)
+        }
+      }
+
+      // 贡献度分析（转化为自然语言描述，AI可直接引用）
+      if (ai?.contributionScore) {
+        const cs = ai.contributionScore
+        const bd = cs.breakdown
+        parts.push(`\n#### 工作特征分析`)
+
+        // 找出占比最大的工作类型
+        const workTypes = [
+          { name: '功能开发', pct: bd.featureWork },
+          { name: '缺陷修复', pct: bd.bugFix },
+          { name: '重构优化', pct: bd.refactoring },
+          { name: '维护性工作', pct: bd.maintenance },
+        ].filter((w) => w.pct > 0).sort((a, b) => b.pct - a.pct)
+
+        if (workTypes.length > 0) {
+          const primary = workTypes[0]
+          const secondary = workTypes.length > 1 ? workTypes[1] : null
+          let desc = `- 该员工的工作以${primary.name}为主(${primary.pct}%)`
+          if (secondary && secondary.pct >= 15) {
+            desc += `，同时承担了较多${secondary.name}(${secondary.pct}%)`
+          }
+          parts.push(desc)
+        }
+
+        // 代码翻转率的自然语言解读
+        if (cs.codeChurnRate > 0.4) {
+          parts.push(`- 代码翻转率较高(${cs.codeChurnRate})，说明有大量重构或迭代优化工作`)
+        } else if (cs.codeChurnRate < 0.15) {
+          parts.push(`- 代码翻转率较低(${cs.codeChurnRate})，以新增功能为主，代码稳定性好`)
+        }
+
+        // 贡献领域描述
+        if (cs.topContributions.length > 0) {
+          const areas = cs.topContributions.filter((c) => c.score >= 10).slice(0, 3)
+          if (areas.length > 0) {
+            parts.push(`- 代码贡献集中在: ${areas.map((c) => c.area).join('、')}`)
+          }
+        }
+      }
+
+      // 工作节奏分析（转化为自然语言描述）
+      if (ai?.workPattern && ai.workPattern.phases.length > 0) {
+        const wp = ai.workPattern
+        parts.push(`\n#### 工作节奏特征`)
+
+        const typeLabels = { sprint: '高强度开发期', steady: '稳定迭代期', low: '低频维护期' }
+        const sprintPhases = wp.phases.filter((p) => p.type === 'sprint')
+        const steadyPhases = wp.phases.filter((p) => p.type === 'steady')
+
+        // 描述主要的高强度阶段
+        if (sprintPhases.length > 0) {
+          const topSprint = sprintPhases.sort((a, b) => b.totalCommits - a.totalCommits)[0]
+          parts.push(`- ${topSprint.startDate} ~ ${topSprint.endDate} 为${typeLabels.sprint}，日均提交${topSprint.avgDailyCommits}次，期间完成了密集的功能开发`)
+        }
+
+        // 描述稳定期
+        if (steadyPhases.length > 0) {
+          const totalSteadyDays = steadyPhases.reduce((sum, p) => {
+            const days = (new Date(p.endDate).getTime() - new Date(p.startDate).getTime()) / (86400000) + 1
+            return sum + days
+          }, 0)
+          if (totalSteadyDays > 30) {
+            parts.push(`- 共有约${Math.round(totalSteadyDays)}天处于${typeLabels.steady}，保持了持续稳定的产出`)
+          }
+        }
+
+        // 整体统计描述
+        const s = wp.summary
+        parts.push(`- 全周期${s.totalDays}天中有${s.activeDays}天有代码提交，最长连续工作${s.longestStreak}天`)
+        if (s.avgDailyCommits >= 2) {
+          parts.push(`- 日均提交${s.avgDailyCommits}次，开发节奏较快`)
+        } else if (s.avgDailyCommits >= 1) {
+          parts.push(`- 日均提交${s.avgDailyCommits}次，开发节奏稳定`)
         }
       }
     }
