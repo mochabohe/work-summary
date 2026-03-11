@@ -4,7 +4,16 @@
       "Read(//c/Users/25198/Desktop/DC-Project/work-summary/$USERPROFILE/**)",
       "Read(//c/Users/25198/**)",
       "Bash(openclaw --version)",
-      "Bash(netsh int:*)"
+      "Bash(netsh int:*)",
+      "Bash(grep -r \"from ''@work-summary/shared''\" \"c:/Users/25198/Desktop/DC-Project/work-summary/packages/server/src/\" --include=\"*.ts\" -l)",
+      "Bash(grep -r \"DIMENSION_SUGGESTIONS\\\\|DEEPSEEK_CONFIG\\\\|EXCLUDED_DIRS\\\\|DOCUMENT_EXTENSIONS\\\\|CODE_EXTENSIONS\\\\|PROJECT_MARKERS\" c:/Users/25198/Desktop/DC-Project/work-summary/packages/client/src/ --include=*.ts --include=*.vue -rn)",
+      "Bash(head -20 grep -n \"DEEPSEEK\\\\|deepseek\\\\|baseURL\\\\|qianfan\\\\|api.deepseek\" c:/Users/25198/Desktop/DC-Project/work-summary/.env.example)",
+      "Bash(bash scripts/build-electron.sh)",
+      "Bash(grep -v \"tsc$\")",
+      "Bash(pnpm run:*)",
+      "Bash(xargs grep:*)",
+      "Bash(pnpm --filter @work-summary/server build)",
+      "Read(//c/Users/25198/Desktop/DC-Project/work-summary/**)"
     ]
   }
 }

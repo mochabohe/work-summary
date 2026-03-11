@@ -708,8 +708,9 @@ function handleBaiduPptExport() {
       exporting.value = ''
     },
     (err) => {
-      baiduPptStatus.value = `❌ 生成失败: ${err}`
+      baiduPptStatus.value = `生成失败: ${err}`
       baiduPptDone.value = true
+      baiduPptError.value = true
       exporting.value = ''
       ElMessage.error(`AI PPT 生成失败: ${err}`)
     },

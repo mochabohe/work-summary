@@ -35,8 +35,8 @@ export class LLMService {
 
   constructor() {
     this.client = new OpenAI({
-      apiKey: 'fc-proxy',  // FC 代理不验证此字段，Key 由代理服务端持有
-      baseURL: DEEPSEEK_CONFIG.baseURL,
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
     })
   }
 

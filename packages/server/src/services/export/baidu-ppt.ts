@@ -41,50 +41,66 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
 }
 
 /**
- * 将 Markdown 工作总结内容提炼为百度 API 可用的 query 摘要
+ * 从 Markdown 工作总结直接构建百度 PPT 大纲
  *
- * 百度 generate_outline 接收的是简短主题描述，不接受长文本，
- * 因此需要从 Markdown 中提取标题结构和关键句子重组。
+ * 忠实解析用户的章节标题和条目，不经过 AI 生成，
+ * 每个条目保留冒号前的关键标题（不超过 30 字）以适配幻灯片版式。
  */
-function buildQueryFromMarkdown(markdown: string): string {
+function buildOutlineFromMarkdown(markdown: string): { title: string; query: string; outline: string } {
   const lines = markdown.split('\n')
-  const titles: string[] = []
-  const keyLines: string[] = []
+  let mainTitle = '工作总结'
+  const sections: { heading: string; items: string[] }[] = []
+  let currentSection: { heading: string; items: string[] } | null = null
 
   for (const line of lines) {
     const trimmed = line.trim()
-    // 提取所有标题
-    const headingMatch = trimmed.match(/^#{1,3}\s+(.+)/)
-    if (headingMatch) {
-      titles.push(headingMatch[1].replace(/\*\*/g, ''))
+    const h1 = trimmed.match(/^#\s+(.+)/)
+    if (h1) {
+      mainTitle = h1[1].replace(/\*\*/g, '').trim()
       continue
     }
-    // 提取非空且有实质内容的正文行（排除列表符号、分隔线等）
-    if (
-      trimmed.length > 20 &&
-      !trimmed.startsWith('-') &&
-      !trimmed.startsWith('*') &&
-      !trimmed.startsWith('>') &&
-      !trimmed.startsWith('|') &&
-      !/^-{3,}$/.test(trimmed)
-    ) {
-      keyLines.push(trimmed.replace(/\*\*/g, '').replace(/\*/g, ''))
+    const h2 = trimmed.match(/^#{2,3}\s+(.+)/)
+    if (h2) {
+      if (currentSection) sections.push(currentSection)
+      currentSection = { heading: h2[1].replace(/\*\*/g, '').trim(), items: [] }
+      continue
+    }
+    const numbered = trimmed.match(/^\d+\.\s+(.+)/)
+    if (numbered && currentSection) {
+      const item = numbered[1].replace(/\*\*/g, '').trim()
+      // 冒号前为关键标题，截取合理长度
+      const colonIdx = item.indexOf('：')
+      const shortItem = colonIdx > 0 && colonIdx <= 25 ? item.slice(0, colonIdx) : item.slice(0, 40)
+      currentSection.items.push(shortItem)
+      continue
+    }
+    const bullet = trimmed.match(/^[-*]\s+(.+)/)
+    if (bullet && currentSection) {
+      const item = bullet[1].replace(/\*\*/g, '').trim()
+      const colonIdx = item.indexOf('：')
+      const shortItem = colonIdx > 0 && colonIdx <= 25 ? item.slice(0, colonIdx) : item.slice(0, 40)
+      currentSection.items.push(shortItem)
     }
   }
 
-  // 第一个 h1 作为主题
-  const mainTitle = titles[0] || '工作总结'
-  // 其余标题作为章节结构
-  const sections = titles.slice(1, 8).join('、')
-  // 取前 3 条关键正文行作为补充说明
-  const excerpts = keyLines.slice(0, 3).join('；')
+  if (currentSection) sections.push(currentSection)
 
-  let query = mainTitle
-  if (sections) query += `，主要包含：${sections}`
-  if (excerpts) query += `。内容摘要：${excerpts}`
+  // 构建百度 outline 格式：# 主标题 + * 章节 + "  * 条目"（星号缩进，非标准 Markdown）
+  let outline = `# ${mainTitle}\n`
+  for (const section of sections) {
+    outline += `* ${section.heading}\n`
+    for (const item of section.items.slice(0, 6)) {
+      outline += `  * ${item}\n`
+    }
+  }
 
-  // 限制在 800 字以内，避免 API 截断
-  return query.slice(0, 800)
+  // query 用于获取会话 ID，需包含章节信息以通过百度后端的内容一致性校验
+  const sectionTitles = sections.map(s => s.heading).join('、')
+  const query = sectionTitles
+    ? `${mainTitle}，主要包含：${sectionTitles}`.slice(0, 300)
+    : mainTitle
+
+  return { title: mainTitle, query, outline }
 }
 
 /**
@@ -299,8 +315,8 @@ export async function exportBaiduPpt(
   let styleId = options?.styleId ?? 0
   let tplId = options?.tplId
 
-  // 将完整 Markdown 内容提炼为简短 query（百度 API 不接受长文本）
-  const pptQuery = buildQueryFromMarkdown(query)
+  // 直接从 Markdown 解析大纲，忠实还原用户工作总结内容
+  const { title: pptTitle, query: pptQuery, outline: customOutline } = buildOutlineFromMarkdown(query)
 
   // 如果没有指定模板，自动选择
   if (!tplId) {
@@ -310,7 +326,7 @@ export async function exportBaiduPpt(
       throw new Error('无可用模板')
     }
 
-    const category = options?.category || suggestCategory(pptQuery)
+    const category = options?.category || suggestCategory(pptTitle)
     const theme = selectTheme(themes, category)
     styleId = theme.style_id
     tplId = theme.tpl_id
@@ -318,12 +334,22 @@ export async function exportBaiduPpt(
     onProgress?.({ status: `已选择模板风格: ${theme.style_name_list?.[0] || '默认'} (ID: ${tplId})` })
   }
 
-  // 生成大纲
-  onProgress?.({ status: '正在生成 PPT 大纲...' })
-  const outline = await generateOutline(apiKey, pptQuery, (chunk) => {
-    onProgress?.({ status: '正在生成 PPT 大纲...', outline: chunk })
-  })
-  onProgress?.({ status: `大纲生成完成: ${outline.title}` })
+  // 获取会话 ID（只用 title 作为 query，不让 AI 生成大纲内容）
+  onProgress?.({ status: '正在初始化 PPT 会话...' })
+  const session = await generateOutline(apiKey, pptQuery)
+
+  // 打印 AI 返回的大纲格式，用于调试
+  console.log('[BaiduPPT] AI outline format (first 500 chars):', session.outline?.slice(0, 500))
+  console.log('[BaiduPPT] AI outline type:', typeof session.outline)
+
+  // 用我们自己解析的大纲替换 AI 生成的大纲
+  const outline: BaiduPptOutline = {
+    chat_id: session.chat_id,
+    query_id: session.query_id,
+    title: pptTitle,
+    outline: customOutline,
+  }
+  onProgress?.({ status: '大纲构建完成', outline: customOutline })
 
   // 生成 PPT
   onProgress?.({ status: 'PPT 生成中...' })

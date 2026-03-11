@@ -4,7 +4,7 @@
   "private": true,
   "description": "智能工作总结生成器",
   "scripts": {
-    "dev": "concurrently \"pnpm --filter @work-summary/server dev\" \"pnpm --filter @work-summary/client dev\"",
+    "dev": "pnpm --filter @work-summary/shared build && concurrently \"pnpm --filter @work-summary/server dev\" \"pnpm --filter @work-summary/client dev\"",
     "dev:server": "pnpm --filter @work-summary/server dev",
     "dev:client": "pnpm --filter @work-summary/client dev",
     "build": "pnpm --filter @work-summary/shared build && pnpm --filter @work-summary/server build && pnpm --filter @work-summary/client build",

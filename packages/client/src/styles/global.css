@@ -243,8 +243,10 @@ body {
 }
 
 .el-select-dropdown__item.hover,
-.el-select-dropdown__item:hover {
+.el-select-dropdown__item:hover,
+.el-select-dropdown__item.is-hovering {
   background: rgba(102, 126, 234, 0.15) !important;
+  color: var(--ws-text-primary) !important;
 }
 
 .el-select-dropdown__item.selected {

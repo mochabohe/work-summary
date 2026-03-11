@@ -63,6 +63,45 @@ function repairTruncatedJson(json: string): string {
   return str
 }
 
+/**
+ * 将章节内容直接解析为幻灯片（不经过 AI），忠实还原 Markdown 结构。
+ * 支持有序列表（1. 2. 3.）和无序列表（- *），每条目尝试提取"标题：描述"格式。
+ * 超过 5 条时自动拆分为多页。
+ */
+function sectionToSlides(title: string, content: string): any[] {
+  const items: string[] = []
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    const numbered = trimmed.match(/^\d+\.\s+(.+)/)
+    if (numbered) { items.push(numbered[1]); continue }
+    const bullet = trimmed.match(/^[-*]\s+(.+)/)
+    if (bullet) { items.push(bullet[1]); continue }
+  }
+
+  // 如果没有列表项，把非空行作为 bullets
+  const bullets = (items.length > 0 ? items : content.split('\n').filter(l => l.trim()))
+    .map(item => {
+      // "主导xxx：描述" → "**主导xxx**：描述"（取第一个中文冒号前不超过 20 字的短语加粗）
+      const idx = item.indexOf('：')
+      if (idx > 0 && idx <= 20) {
+        return `**${item.slice(0, idx)}**：${item.slice(idx + 1)}`
+      }
+      return item
+    })
+
+  const slides: any[] = []
+  const maxPerSlide = 5
+  for (let i = 0; i < bullets.length; i += maxPerSlide) {
+    slides.push({
+      type: 'content',
+      title: i === 0 ? title : `${title}（续）`,
+      bullets: bullets.slice(i, i + maxPerSlide),
+    })
+  }
+  return slides.length > 0 ? slides : [{ type: 'content', title, bullets: [] }]
+}
+
 /** 解析 Markdown 文本，按 ## 标题拆分为多个章节 */
 function parseMarkdownSections(markdown: string): { title: string; content: string }[] {
   const sections: { title: string; content: string }[] = []
@@ -147,7 +186,6 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
       let metricsRaw = ''
       for await (const chunk of llm.streamChat(metricsMessages, undefined, 2048)) {
         metricsRaw += chunk
-        reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
       }
 
       const metricsSlide = parseAiJson(metricsRaw)
@@ -156,34 +194,16 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
         app.log.info('成功生成 metrics 幻灯片')
       }
 
-      // --- 3. 逐章节生成幻灯片 ---
+      // --- 3. 逐章节直接解析幻灯片（无 AI，忠实还原原文内容） ---
       for (let i = 0; i < sections.length; i++) {
         step++
         const section = sections[i]
-        reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: `[${step}/${totalSteps}] 正在生成板块：${section.title}...` })}\n\n`)
+        reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: `[${step}/${totalSteps}] 正在转换章节：${section.title}...` })}\n\n`)
 
-        // AI 生成该章节的内容幻灯片
-        const sectionMessages = promptBuilder.buildSectionSlidesPrompt(section.title, section.content)
-        let sectionRaw = ''
-        for await (const chunk of llm.streamChat(sectionMessages, undefined, 4096)) {
-          sectionRaw += chunk
-          reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
-        }
-
-        const sectionSlides = parseAiJson(sectionRaw)
-        const parsedSlides: any[] = Array.isArray(sectionSlides)
-          ? sectionSlides
-          : sectionSlides ? [sectionSlides] : []
-
-        // 只有 AI 成功生成了内容幻灯片，才插入章节过渡页 + 内容页
-        // 避免连续出现两个空的章节标题页
-        if (parsedSlides.length > 0) {
-          allSlides.push({ type: 'section', title: section.title })
-          allSlides.push(...parsedSlides)
-          app.log.info(`章节 "${section.title}" 生成了 ${parsedSlides.length} 页幻灯片`)
-        } else {
-          app.log.warn(`章节 "${section.title}" 未能生成有效幻灯片，已跳过`)
-        }
+        const parsedSlides = sectionToSlides(section.title, section.content)
+        allSlides.push({ type: 'section', title: section.title })
+        allSlides.push(...parsedSlides)
+        app.log.info(`章节 "${section.title}" 解析了 ${parsedSlides.length} 页幻灯片`)
       }
 
       // --- 4. 年度总结页（AI 提炼亮点 + 关键词） ---

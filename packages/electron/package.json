@@ -32,8 +32,12 @@
         "to": "server"
       },
       {
+        "from": "../server/package.json",
+        "to": "server/package.json"
+      },
+      {
         "from": "../server/node_modules",
-        "to": "server-modules"
+        "to": "server/node_modules"
       },
       {
         "from": "../client/dist",

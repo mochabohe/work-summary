@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog } from 'electron'
-import { fork, ChildProcess } from 'child_process'
+import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as net from 'net'
 
@@ -44,14 +44,17 @@ async function startServer(port: number): Promise<void> {
       ? path.join(process.resourcesPath, 'server')
       : path.join(__dirname, '..', '..', 'server')
 
-    // 打包后 server 的 node_modules 在 resources/server-modules
+    // 打包后 server 的 node_modules 在 resources/server/node_modules
     const serverModulesPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'server-modules')
+      ? path.join(process.resourcesPath, 'server', 'node_modules')
       : path.join(__dirname, '..', '..', 'server', 'node_modules')
 
-    serverProcess = fork(serverEntry, [], {
+    // 使用 spawn + ELECTRON_RUN_AS_NODE=1 代替 fork
+    // 这样 Electron 的内置 Node 会以纯 Node 模式运行，正确支持 ESM
+    serverProcess = spawn(process.execPath, [serverEntry], {
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
         SERVER_PORT: String(port),
         DOTENV_PATH: envPath,
         CLIENT_DIST_PATH: clientPath,
@@ -59,7 +62,7 @@ async function startServer(port: number): Promise<void> {
         NODE_PATH: serverModulesPath,
       },
       cwd: serverCwd,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
 
     let resolved = false
