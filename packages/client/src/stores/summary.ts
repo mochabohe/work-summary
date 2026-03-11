@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import type {
   SummaryAudience,
   SummaryDocType,
+  SummaryFormat,
   SummaryLanguage,
   SummaryLength,
   SummaryStyle,
@@ -59,6 +60,8 @@ export const useSummaryStore = defineStore('summary', () => {
   const length = ref<SummaryLength>(saved?.length ?? 'medium')
   /** 输出语言 */
   const language = ref<SummaryLanguage>(saved?.language ?? 'zh-CN')
+  /** 输出格式 */
+  const format = ref<SummaryFormat>(saved?.format ?? 'bullets')
   /** 用户自定义要求 */
   const customPrompt = ref<string>(saved?.customPrompt ?? '')
   /** 业务背景 */
@@ -82,6 +85,7 @@ export const useSummaryStore = defineStore('summary', () => {
         tone: tone.value,
         length: length.value,
         language: language.value,
+        format: format.value,
         customPrompt: customPrompt.value,
         businessContext: businessContext.value,
         feishuDocs: feishuDocs.value,
@@ -96,7 +100,7 @@ export const useSummaryStore = defineStore('summary', () => {
 
   // 监听关键状态变化，自动持久化
   watch(
-    [content, dimensions, style, docType, audience, tone, length, language, customPrompt, businessContext, feishuDocs, versions, chatMessages],
+    [content, dimensions, style, docType, audience, tone, length, language, format, customPrompt, businessContext, feishuDocs, versions, chatMessages],
     persist,
     { deep: true },
   )
@@ -164,6 +168,7 @@ export const useSummaryStore = defineStore('summary', () => {
     tone.value = 'professional'
     length.value = 'medium'
     language.value = 'zh-CN'
+    format.value = 'bullets'
   }
 
   return {
@@ -176,6 +181,7 @@ export const useSummaryStore = defineStore('summary', () => {
     tone,
     length,
     language,
+    format,
     customPrompt,
     businessContext,
     feishuDocs,

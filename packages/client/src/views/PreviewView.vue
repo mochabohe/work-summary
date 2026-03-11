@@ -96,8 +96,47 @@
             <el-icon><CopyDocument /></el-icon>
             复制到剪贴板
           </el-button>
+
+          <el-divider direction="vertical" />
+
+          <el-button
+            type="danger"
+            size="large"
+            @click="handleBaiduPptExport"
+            :loading="exporting === 'baidu-ppt'"
+            :disabled="!baiduPptAvailable"
+          >
+            ✨ AI 精美演示文稿
+          </el-button>
         </div>
       </el-card>
+
+      <!-- 百度 AI PPT 进度对话框 -->
+      <el-dialog
+        v-model="baiduPptVisible"
+        title="✨ AI 精美演示文稿生成"
+        width="520"
+        :close-on-click-modal="false"
+        :show-close="true"
+        @close="cancelBaiduPpt"
+      >
+        <div class="baidu-ppt-progress">
+          <el-icon v-if="!baiduPptDone" class="is-loading baidu-spinner"><Loading /></el-icon>
+          <el-icon v-else-if="!baiduPptError" style="font-size:40px;color:#67c23a;">
+            <SuccessFilled />
+          </el-icon>
+          <span v-else style="font-size:32px;">❌</span>
+          <p class="baidu-ppt-status">{{ baiduPptStatus }}</p>
+          <div v-if="baiduPptOutline" class="baidu-ppt-outline">
+            <pre>{{ baiduPptOutline }}</pre>
+          </div>
+          <div v-if="baiduPptUrl" class="baidu-ppt-actions">
+            <el-button type="primary" size="large" @click="downloadBaiduPpt">
+              📥 下载 PPT
+            </el-button>
+          </div>
+        </div>
+      </el-dialog>
 
       <!-- PPT 标题输入对话框 -->
       <el-dialog
@@ -329,10 +368,10 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document, CopyDocument, Loading } from '@element-plus/icons-vue'
+import { Document, CopyDocument, Loading, SuccessFilled } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useSummaryStore } from '@/stores/summary'
-import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides } from '@/api/exportApi'
+import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides, checkBaiduPptStatus, exportBaiduPpt, downloadFromUrl } from '@/api/exportApi'
 import type { PptData, CustomColors } from '@/api/exportApi'
 
 const router = useRouter()
@@ -635,6 +674,68 @@ async function confirmPdfSlidesDownload() {
   }
 }
 
+// ====== 百度 AI PPT 精美导出 ======
+const baiduPptAvailable = ref(false)
+const baiduPptVisible = ref(false)
+const baiduPptStatus = ref('')
+const baiduPptOutline = ref('')
+const baiduPptUrl = ref('')
+const baiduPptDone = ref(false)
+const baiduPptError = ref(false)
+let cancelBaiduPptFn: (() => void) | null = null
+
+// 启动时检查百度 API 是否可用
+checkBaiduPptStatus().then((ok) => { baiduPptAvailable.value = ok })
+
+function handleBaiduPptExport() {
+  exporting.value = 'baidu-ppt'
+  baiduPptStatus.value = '正在连接百度 AI PPT 服务...'
+  baiduPptOutline.value = ''
+  baiduPptUrl.value = ''
+  baiduPptDone.value = false
+  baiduPptError.value = false
+  baiduPptVisible.value = true
+
+  cancelBaiduPptFn = exportBaiduPpt(
+    editableContent.value,
+    (status) => {
+      baiduPptStatus.value = status
+    },
+    (pptUrl) => {
+      baiduPptUrl.value = pptUrl
+      baiduPptDone.value = true
+      baiduPptStatus.value = '🎉 PPT 生成完成！点击下方按钮下载'
+      exporting.value = ''
+    },
+    (err) => {
+      baiduPptStatus.value = `❌ 生成失败: ${err}`
+      baiduPptDone.value = true
+      exporting.value = ''
+      ElMessage.error(`AI PPT 生成失败: ${err}`)
+    },
+    { filename: exportFilename.value },
+    (chunk) => {
+      baiduPptOutline.value += chunk
+    },
+  )
+}
+
+function cancelBaiduPpt() {
+  if (cancelBaiduPptFn) {
+    cancelBaiduPptFn()
+    cancelBaiduPptFn = null
+  }
+  exporting.value = ''
+}
+
+function downloadBaiduPpt() {
+  if (baiduPptUrl.value) {
+    const filename = `${exportFilename.value || '工作总结'}.pptx`
+    downloadFromUrl(baiduPptUrl.value, filename)
+    ElMessage.success('PPT 已开始下载')
+  }
+}
+
 async function handleExport(format: string) {
   exporting.value = format
 
@@ -698,18 +799,18 @@ async function handleExport(format: string) {
 
 .markdown-preview :deep(h2) {
   font-size: 20px;
-  color: #2c3e50;
+  color: #e2e8f0;
   margin: 20px 0 10px;
 }
 
 .markdown-preview :deep(h3) {
   font-size: 16px;
-  color: #34495e;
+  color: #cbd5e1;
   margin: 16px 0 8px;
 }
 
 .markdown-preview :deep(strong) {
-  color: #2c3e50;
+  color: #e2e8f0;
 }
 
 .markdown-preview :deep(ul) {
@@ -733,7 +834,7 @@ async function handleExport(format: string) {
 
 .export-filename-label {
   font-size: 14px;
-  color: #606266;
+  color: #cbd5e1;
   white-space: nowrap;
 }
 
@@ -787,7 +888,7 @@ async function handleExport(format: string) {
 
 .ppt-status {
   font-size: 14px;
-  color: #666;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* 全屏对话框布局：让画廊占满对话框主体 */
@@ -1375,7 +1476,7 @@ async function handleExport(format: string) {
   justify-content: center;
   gap: 32px;
   padding: 12px 24px;
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid #e8ecf2;
   flex-shrink: 0;
 }
@@ -1395,4 +1496,45 @@ async function handleExport(format: string) {
 }
 
 .ppt-preview-footer { display: flex; justify-content: center; gap: 16px; }
+
+/* 百度 AI PPT 进度 */
+.baidu-ppt-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0;
+  gap: 16px;
+}
+.baidu-spinner {
+  font-size: 40px;
+  color: var(--el-color-danger);
+}
+.baidu-ppt-status {
+  font-size: 15px;
+  color: #e2e8f0;
+  text-align: center;
+  line-height: 1.6;
+}
+.baidu-ppt-outline {
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px 14px;
+  text-align: left;
+}
+.baidu-ppt-outline pre {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  line-height: 1.7;
+}
+.baidu-ppt-actions {
+  margin-top: 8px;
+}
 </style>

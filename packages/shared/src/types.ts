@@ -203,6 +203,9 @@ export type SummaryLength = 'short' | 'medium' | 'long'
 /** 输出语言 */
 export type SummaryLanguage = 'zh-CN' | 'en-US'
 
+/** 输出格式 */
+export type SummaryFormat = 'bullets' | 'star'
+
 /** 生成请求参数 */
 export interface GenerateRequest {
   /** 选中的项目分析数据 */
@@ -225,6 +228,8 @@ export interface GenerateRequest {
   length?: SummaryLength
   /** 输出语言 */
   language?: SummaryLanguage
+  /** 输出格式（bullets=序号要点 / star=STAR法则） */
+  format?: SummaryFormat
   /** 用户自定义要求 */
   customPrompt?: string
   /** 业务背景（描述核心业务目标或面临的挑战） */

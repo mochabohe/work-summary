@@ -3,6 +3,7 @@ import type {
   ProjectAnalysis,
   SummaryAudience,
   SummaryDocType,
+  SummaryFormat,
   SummaryLanguage,
   SummaryLength,
   SummaryStyle,
@@ -17,6 +18,7 @@ interface PipelineOptions {
   tone: SummaryTone
   length: SummaryLength
   language: SummaryLanguage
+  format: SummaryFormat
 }
 
 export class PromptBuilder {
@@ -39,17 +41,20 @@ export class PromptBuilder {
 
   /** 构建单个章节的幻灯片提示词（分段生成 - 逐章节） */
   buildSectionSlidesPrompt(sectionTitle: string, sectionContent: string): ChatMessage[] {
-    return [
-      {
-        role: 'system',
-        content: `你是一位演示文稿设计师。将给定的工作总结章节转换为幻灯片，输出紧凑的 JSON 数组。
+    // 检测内容是否为 STAR 格式
+    const isStarFormat = /\*\*S[-\s]*(Situation|情境|背景)/i.test(sectionContent)
+      && /\*\*[ATAR][-\s]*/i.test(sectionContent)
 
-## 规则
-1. 只输出纯 JSON 数组（不要换行缩进，不要代码块标记，不要任何额外文字）
-2. 该章节的每一条要点都必须出现，不能遗漏任何一条
-3. 如果要点超过 5 条，使用多个幻灯片展示
-4. 根据内容特点选择合适的类型，尽量混合使用不同类型
+    const starParsingGuide = isStarFormat ? `
+## 输入格式：STAR 法则
+当前章节内容已经按 STAR 法则组织（S-Situation、T-Task、A-Action、R-Result），请务必保留这个结构。
 
+推荐布局（按优先级选择）：
+1. **grid 布局**（最推荐）：将 S/T/A/R 四段分别放入 4 张卡片，卡片标题分别为"情境 Situation"、"任务 Task"、"行动 Action"、"结果 Result"
+2. **two-column 布局**：左栏放"情境 & 任务"（S+T），右栏放"行动 & 结果"（A+R）
+3. **多页 content**：如果某一段内容特别长，可以拆成多页，但每页要标明属于 STAR 的哪个阶段
+
+重要：不要丢掉 STAR 结构，不要把 S/T/A/R 的内容混在一起变成普通要点列表。` : `
 ## STAR 原则（重要）
 当章节内容涉及具体项目交付或重要工作成果时，优先按 STAR 法则组织：
 - **S 情境**：项目背景、业务痛点或技术挑战（为什么做）
@@ -61,7 +66,19 @@ export class PromptBuilder {
 - 用 two-column 将 "情境与任务"(左栏) 和 "行动与结果"(右栏) 对照展示
 - 或用 grid 将 S/T/A/R 四个维度分为 4 张卡片
 - 如果要点较多，也可用多页 content 按 S→T→A→R 顺序叙述
-注意：仅对项目/成果类内容使用 STAR，学习成长、团队协作等软性内容不必强套。
+注意：仅对项目/成果类内容使用 STAR，学习成长、团队协作等软性内容不必强套。`
+
+    return [
+      {
+        role: 'system',
+        content: `你是一位演示文稿设计师。将给定的工作总结章节转换为幻灯片，输出紧凑的 JSON 数组。
+
+## 规则
+1. 只输出纯 JSON 数组（不要换行缩进，不要代码块标记，不要任何额外文字）
+2. 该章节的所有内容都必须出现在幻灯片中，不能遗漏
+3. 如果内容较多，使用多个幻灯片展示
+4. 根据内容特点选择合适的类型，尽量混合使用不同类型
+${starParsingGuide}
 
 ## 可用类型（3 种）
 - content: {"type":"content","title":"标题","bullets":["**小标题**：描述"]}
@@ -237,6 +254,7 @@ export class PromptBuilder {
       tone: request.tone || 'professional',
       length: request.length || 'medium',
       language: request.language || 'zh-CN',
+      format: request.format || 'bullets',
     }
   }
 
@@ -274,21 +292,28 @@ export class PromptBuilder {
       'en-US': '全文使用英文',
     }
 
+    const formatGuide = options.format === 'star'
+      ? '- 输出格式：STAR 法则（每个项目/关键事件按 Situation-Task-Action-Result 四段描述）'
+      : '- 输出格式：序号要点（## 标题 + 编号要点列表）'
+
     return [
       '## 写作目标',
       `- 文档类型：${docTypeMap[options.docType]}`,
       `- 目标读者：${audienceMap[options.audience]}`,
-      `- 风格：${options.style === 'formal' ? '业务导向（弱化技术细节）' : '技术叙述（业务与技术并重）'}`,
+      `- 风格：${options.style === 'formal' ? '业务导向（弱化技术细节，标题从业务价值角度命名）' : '技术叙述（业务与技术并重，标题可包含技术方向和技术栈）'}`,
       `- 语气：${toneMap[options.tone]}`,
       `- 长度：${lengthMap[options.length]}`,
       `- 语言：${languageMap[options.language]}`,
+      formatGuide,
     ].join('\n')
   }
 
   private buildDraftSystemPrompt(options: PipelineOptions): string {
     const styleGuide: Record<SummaryStyle, string> = {
-      'formal': `业务导向：强调业务价值、协同影响、风险收敛；弱化实现细节。`,
-      'semi-formal': `技术叙述：业务结果与技术过程并重，可提及方案选型与攻坚细节。`,
+      'formal': `业务导向：强调业务价值、协同影响、风险收敛；弱化实现细节。
+章节标题应从业务视角命名，体现业务价值和成果（如"智能座舱体验升级与交付"、"数据驱动的用户洞察体系建设"），不要出现具体技术栈名称。`,
+      'semi-formal': `技术叙述：业务结果与技术过程并重，可提及方案选型与攻坚细节。
+章节标题应体现技术方向和工程实践（如"基于 Vue3 的移动端聊天架构设计"、"React + ECharts 数据可视化平台搭建"），可包含技术栈关键词。`,
     }
 
     const toneGuide: Record<SummaryTone, string> = {
@@ -306,19 +331,31 @@ export class PromptBuilder {
 核心要求：
 1. 只输出最终正文，不要开场白、解释或免责声明。
 2. 只写有证据支撑的内容，无法证实的数字不要出现。
-3. 结构采用"## 二级标题 + 1. 2. 3. 序号要点"。
-4. 序号要点格式："1. **小标题**：具体描述"。
+${options.format === 'star' ? `3. 每个项目/关键事件使用 STAR 法则描述，结构如下：
+   ## 项目/事件标题
+   **S-Situation（背景）**：介绍项目背景、业务痛点或面临的挑战。
+   **T-Task（任务）**：需要完成的目标和个人承担的职责。
+   **A-Action（行动）**：个人采取的关键行动，包括思考过程、技术方案和具体实施。
+   **R-Result（结果）**：最终成果，包括完成情况、业务影响和量化收益。
+4. 每个 STAR 段落要有实质内容（2-4句话），不要只写一句话敷衍。
+5. A-Action 部分要突出"个人"的思考和行动，不要写成团队流水账。` : `3. 结构采用"## 二级标题 + 1. 2. 3. 序号要点"。
+4. 序号要点格式："1. **小标题**：具体描述"。`}
 5. 不使用"我"作为主语，优先使用"主导/负责/推进/完成"等客观表述。
 6. 标题必须具体，不要直接复用抽象维度词。
 
 禁用词汇（出现即为不合格）：
 时光飞逝、转眼间、展望未来、不懈努力、硕果累累、总而言之、在这充满挑战的一年里、砥砺前行、不忘初心、持续赋能、深耕细作。
-
+${options.format === 'star' ? `
+句式规范：
+- 不要像写日记一样记流水账，也不要罗列琐碎的 bug 修复
+- 将零散的提交记录归纳为有意义的项目/事件
+- 每个项目的 S-T-A-R 四段要逻辑连贯，形成完整叙事
+- 可以将多个小项目合并为一个 STAR 叙事，也可以一个大项目拆分为多个关键事件` : `
 句式规范：
 - 推荐句式：**[动词短语] + [模块/场景]：[具体方案] + [产出结果]**
   示例："主导订单列表查询优化：引入 Redis 缓存热点数据，核心接口响应时间从 500ms 降至 50ms"
 - 不要像写日记一样记流水账，也不要罗列琐碎的 bug 修复
-- 将零散的提交记录抽象为"业务价值"或"技术难点"，多个相关修复可归纳为一条
+- 将零散的提交记录抽象为"业务价值"或"技术难点"，多个相关修复可归纳为一条`}
 
 写作偏好：
 - ${styleGuide[options.style]}

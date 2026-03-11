@@ -17,11 +17,32 @@ interface DirEntry {
 
 /** 解析 Windows .lnk 快捷方式的目标路径 */
 async function resolveLnkTarget(lnkPath: string): Promise<string | null> {
-  if (process.platform !== 'win32') return null
+  // 在 WSL 环境下也支持解析 .lnk（通过 powershell.exe）
   try {
-    const script = `(New-Object -ComObject WScript.Shell).CreateShortcut('${lnkPath.replace(/'/g, "''")}').TargetPath`
-    const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', script], { timeout: 3000 })
-    return stdout.trim() || null
+    const winPath = lnkPath.replace(/^\/mnt\/([a-z])\//, (_, d: string) => `${d.toUpperCase()}:\\`).replace(/\//g, '\\')
+    const script = `(New-Object -ComObject WScript.Shell).CreateShortcut('${winPath.replace(/'/g, "''")}').TargetPath`
+
+    let cmd: string
+    let args: string[]
+    if (process.platform === 'win32') {
+      cmd = 'powershell'
+      args = ['-NoProfile', '-Command', script]
+    } else {
+      // WSL: 调用 Windows 的 powershell.exe
+      cmd = 'powershell.exe'
+      args = ['-NoProfile', '-Command', script]
+    }
+
+    const { stdout } = await execFileAsync(cmd, args, { timeout: 5000 })
+    const target = stdout.trim()
+    if (!target) return null
+
+    // 如果在 WSL 下，把 Windows 路径转成 WSL 路径
+    if (process.platform !== 'win32' && /^[A-Z]:\\/.test(target)) {
+      const drive = target[0].toLowerCase()
+      return `/mnt/${drive}/${target.substring(3).replace(/\\/g, '/')}`
+    }
+    return target
   } catch {
     return null
   }
@@ -54,7 +75,7 @@ export const fsRoutes: FastifyPluginAsync = async (app) => {
             path: path.join(targetPath, entry.name),
             isDirectory: true,
           })
-        } else if (process.platform === 'win32' && entry.name.endsWith('.lnk')) {
+        } else if (entry.name.endsWith('.lnk')) {
           // 收集 .lnk 快捷方式，稍后批量解析
           lnkFiles.push(entry.name)
         }

@@ -88,7 +88,7 @@ function addDoc() {
 
 .section-desc {
   font-size: 14px;
-  color: #606266;
+  color: #cbd5e1;
   margin-bottom: 16px;
 }
 
@@ -101,20 +101,20 @@ function addDoc() {
   align-items: center;
   justify-content: space-between;
   padding: 12px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   margin-bottom: 8px;
 }
 
 .doc-label {
   font-weight: 600;
-  color: #303133;
+  color: #e2e8f0;
   margin-bottom: 4px;
 }
 
 .doc-preview {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   line-height: 1.5;
 }
 

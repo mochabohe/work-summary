@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/25198/Desktop/DC-Project/work-summary/$USERPROFILE/**)",
+      "Read(//c/Users/25198/**)",
+      "Bash(openclaw --version)",
+      "Bash(netsh int:*)"
+    ]
+  }
+}

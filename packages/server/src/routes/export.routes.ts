@@ -1,6 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { ExportService } from '../services/export/index.js'
+import { exportBaiduPpt } from '../services/export/baidu-ppt.js'
 import type { PptData, CustomColors } from '../services/export/index.js'
+import type { BaiduPptResult } from '../services/export/baidu-ppt.js'
 
 /** 生成安全的 Content-Disposition 头（支持中文文件名） */
 function safeContentDisposition(filename: string, ext: string): string {
@@ -119,6 +121,86 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       app.log.error(err, 'PPTX 导出失败')
       return reply.status(500).send({ success: false, error: (err as Error).message })
+    }
+  })
+
+  // ========== 百度 AI PPT 导出（SSE 流式） ==========
+  app.post<{
+    Body: { content: string; category?: string; tplId?: number; filename?: string }
+  }>('/baidu-ppt', async (request, reply) => {
+    const { content, category, tplId, filename = 'work-summary' } = request.body
+
+    if (!content) {
+      return reply.status(400).send({ success: false, error: '缺少 content 参数' })
+    }
+
+    const apiKey = process.env.BAIDU_API_KEY
+    if (!apiKey) {
+      return reply.status(500).send({ success: false, error: '未配置 BAIDU_API_KEY' })
+    }
+
+    // SSE 流式响应
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    try {
+      const pptUrl = await exportBaiduPpt(
+        content,
+        apiKey,
+        { category, tplId },
+        (event: BaiduPptResult) => {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+        },
+      )
+
+      // 最终结果
+      reply.raw.write(`data: ${JSON.stringify({
+        status: '完成',
+        is_end: true,
+        data: { pptx_url: pptUrl },
+      })}\n\n`)
+    } catch (err) {
+      app.log.error(err, '百度 AI PPT 导出失败')
+      reply.raw.write(`data: ${JSON.stringify({
+        status: '失败',
+        is_end: true,
+        error: (err as Error).message,
+      })}\n\n`)
+    }
+
+    reply.raw.end()
+  })
+
+  // 获取百度 AI PPT 可用模板列表
+  app.get('/baidu-ppt/themes', async (_request, reply) => {
+    const apiKey = process.env.BAIDU_API_KEY
+    if (!apiKey) {
+      return reply.status(500).send({ success: false, error: '未配置 BAIDU_API_KEY' })
+    }
+
+    try {
+      const res = await fetch('https://qianfan.baidubce.com/v2/tools/ai_ppt/get_ppt_theme', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      })
+      const json = await res.json() as any
+      return { success: true, data: json.data?.ppt_themes || [] }
+    } catch (err) {
+      return reply.status(500).send({ success: false, error: (err as Error).message })
+    }
+  })
+
+  // 检查百度 API Key 是否已配置
+  app.get('/baidu-ppt/status', async () => {
+    return {
+      success: true,
+      data: {
+        configured: !!process.env.BAIDU_API_KEY,
+      },
     }
   })
 }

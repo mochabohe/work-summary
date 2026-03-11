@@ -219,13 +219,13 @@ async function startAnalysis() {
 .analyze-prompt p {
   margin-bottom: 16px;
   font-size: 16px;
-  color: #606266;
+  color: #cbd5e1;
 }
 
 .progress-text {
   text-align: center;
   margin-top: 12px;
-  color: #606266;
+  color: #cbd5e1;
 }
 
 .analysis-list {
@@ -268,14 +268,14 @@ async function startAnalysis() {
 .stat-item {
   text-align: center;
   padding: 12px;
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 8px;
 }
 
 .stat-value {
   font-size: 20px;
   font-weight: 700;
-  color: #303133;
+  color: #e2e8f0;
 }
 
 .stat-value.add { color: #67c23a; }
@@ -283,13 +283,13 @@ async function startAnalysis() {
 
 .stat-label {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 4px;
 }
 
 .time-range {
   font-size: 13px;
-  color: #606266;
+  color: #cbd5e1;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -297,13 +297,13 @@ async function startAnalysis() {
 
 h4 {
   font-size: 14px;
-  color: #303133;
+  color: #e2e8f0;
   margin-bottom: 8px;
 }
 
 .info-label {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 4px;
 }
 
@@ -331,7 +331,7 @@ h4 {
 
 .commit-list {
   font-size: 13px;
-  color: #606266;
+  color: #cbd5e1;
   padding-left: 20px;
   line-height: 1.8;
 }

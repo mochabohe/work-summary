@@ -182,3 +182,121 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+// ========== 百度 AI PPT 精美导出 ==========
+
+export interface BaiduPptProgress {
+  status: string
+  is_end?: boolean
+  data?: { pptx_url: string }
+  error?: string
+  outline?: string
+}
+
+/** 检查百度 AI PPT 是否可用 */
+export async function checkBaiduPptStatus(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/v1/export/baidu-ppt/status')
+    const json = await res.json() as any
+    return json.data?.configured ?? false
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 百度 AI PPT 精美导出（SSE 流式）
+ *
+ * @param content 工作总结内容（Markdown 文本）
+ * @param onProgress 进度回调
+ * @param onDone 完成回调，返回 PPT 下载 URL
+ * @param onError 错误回调
+ * @param options 可选配置（模板风格/模板ID）
+ * @returns 取消函数
+ */
+export function exportBaiduPpt(
+  content: string,
+  onProgress: (status: string) => void,
+  onDone: (pptUrl: string) => void,
+  onError: (err: string) => void,
+  options?: { category?: string; tplId?: number; filename?: string },
+  onOutlineChunk?: (chunk: string) => void,
+): () => void {
+  const controller = new AbortController()
+
+  fetch('/api/v1/export/baidu-ppt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content,
+      category: options?.category,
+      tplId: options?.tplId,
+      filename: options?.filename,
+    }),
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        onError(`请求失败: HTTP ${response.status}`)
+        return
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        onError('无法获取响应流')
+        return
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data: BaiduPptProgress = JSON.parse(line.substring(6))
+              if (data.error) {
+                onError(data.error)
+                return
+              }
+              if (data.outline) {
+                onOutlineChunk?.(data.outline)
+              }
+              if (data.status) {
+                onProgress(data.status)
+              }
+              if (data.is_end && data.data?.pptx_url) {
+                onDone(data.data.pptx_url)
+                return
+              }
+            } catch {}
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onError(err.message)
+      }
+    })
+
+  return () => controller.abort()
+}
+
+/** 通过 URL 下载 PPT 文件 */
+export function downloadFromUrl(url: string, filename = 'work-summary.pptx') {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.target = '_blank'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}

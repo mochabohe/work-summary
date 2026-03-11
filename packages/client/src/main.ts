@@ -10,5 +10,5 @@ import './styles/global.css'
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
+app.use(ElementPlus, { locale: zhCn as any })
 app.mount('#app')

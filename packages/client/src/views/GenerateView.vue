@@ -143,6 +143,10 @@
                   <span class="collapsed-label">输出：</span>
                   <span>{{ writingSummaryLabel }}</span>
                 </div>
+                <div class="collapsed-item">
+                  <span class="collapsed-label">格式：</span>
+                  <span>{{ formatLabel }}</span>
+                </div>
                 <div v-if="summaryStore.businessContext" class="collapsed-item">
                   <span class="collapsed-label">补充说明：</span>
                   <span class="collapsed-prompt">{{ summaryStore.businessContext }}</span>
@@ -243,6 +247,12 @@
                     <span class="writing-label">输出语言</span>
                     <el-select v-model="summaryStore.language" size="small">
                       <el-option v-for="item in languageOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                  </div>
+                  <div class="writing-item">
+                    <span class="writing-label">输出格式</span>
+                    <el-select v-model="summaryStore.format" size="small">
+                      <el-option v-for="item in formatOptions" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
                   </div>
                 </div>
@@ -754,6 +764,11 @@ const languageOptions = [
   { value: 'en-US', label: 'English' },
 ] as const
 
+const formatOptions = [
+  { value: 'bullets', label: '序号要点' },
+  { value: 'star', label: 'STAR 法则' },
+] as const
+
 const anyCompareGenerating = computed(() => {
   return compareGenerating['formal'] || compareGenerating['semi-formal']
 })
@@ -790,6 +805,7 @@ const audienceLabel = computed(() => findOptionLabel(audienceOptions, summarySto
 const toneLabel = computed(() => findOptionLabel(toneOptions, summaryStore.tone))
 const lengthLabel = computed(() => findOptionLabel(lengthOptions, summaryStore.length))
 const languageLabel = computed(() => findOptionLabel(languageOptions, summaryStore.language))
+const formatLabel = computed(() => findOptionLabel(formatOptions, summaryStore.format))
 const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.value} / ${languageLabel.value}`)
 
 const canGenerate = computed(() => {
@@ -1179,6 +1195,7 @@ function buildGenerateRequest() {
     tone: summaryStore.tone,
     length: summaryStore.length,
     language: summaryStore.language,
+    format: summaryStore.format,
     businessContext: summaryStore.businessContext || undefined,
     roles: settingsStore.roles.length > 0 ? settingsStore.roles : undefined,
   }
@@ -1281,7 +1298,7 @@ function moveOutline(index: number, direction: number) {
   align-items: center;
   margin-bottom: 16px;
   padding: 12px 16px;
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 8px;
 }
 
@@ -1294,12 +1311,12 @@ function moveOutline(index: number, direction: number) {
 .compare-title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: #e2e8f0;
 }
 
 .compare-subtitle {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .compare-actions {
@@ -1328,12 +1345,12 @@ function moveOutline(index: number, direction: number) {
 .compare-style-name {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: #e2e8f0;
 }
 
 .compare-style-desc {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 2px;
 }
 
@@ -1361,7 +1378,7 @@ function moveOutline(index: number, direction: number) {
   gap: 8px;
   padding: 12px 0;
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .loading-dots {
@@ -1373,7 +1390,7 @@ function moveOutline(index: number, direction: number) {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #409eff;
+  background: #667eea;
   animation: dotPulse 1.2s ease-in-out infinite;
 }
 
@@ -1398,7 +1415,7 @@ function moveOutline(index: number, direction: number) {
 
 .compare-edit-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   padding: 4px 0 8px;
   flex-shrink: 0;
 }
@@ -1406,7 +1423,7 @@ function moveOutline(index: number, direction: number) {
 .compare-textarea {
   flex: 1;
   width: 100%;
-  border: 1px solid #dcdfe6;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   padding: 10px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -1414,7 +1431,7 @@ function moveOutline(index: number, direction: number) {
   line-height: 1.6;
   resize: none;
   outline: none;
-  color: #303133;
+  color: #e2e8f0;
   box-sizing: border-box;
 }
 
@@ -1436,7 +1453,7 @@ function moveOutline(index: number, direction: number) {
 
 .section h4 {
   font-size: 14px;
-  color: #303133;
+  color: #e2e8f0;
   margin-bottom: 10px;
 }
 
@@ -1449,7 +1466,7 @@ function moveOutline(index: number, direction: number) {
 
 .style-desc {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .writing-grid {
@@ -1466,7 +1483,7 @@ function moveOutline(index: number, direction: number) {
 
 .writing-label {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .selected-dims {
@@ -1482,7 +1499,7 @@ function moveOutline(index: number, direction: number) {
 
 .empty-dims {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 10px;
 }
 
@@ -1501,7 +1518,7 @@ function moveOutline(index: number, direction: number) {
 
 .suggestion-label {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   flex-shrink: 0;
 }
 
@@ -1558,13 +1575,13 @@ function moveOutline(index: number, direction: number) {
 
 .generating-phase {
   font-size: 15px;
-  color: #303133;
+  color: #e2e8f0;
   font-weight: 500;
 }
 
 .generating-hint {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .markdown-preview {
@@ -1574,25 +1591,25 @@ function moveOutline(index: number, direction: number) {
 
 .markdown-preview :deep(h1) {
   font-size: 24px;
-  border-bottom: 2px solid #eee;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
   padding-bottom: 8px;
   margin: 20px 0 12px;
 }
 
 .markdown-preview :deep(h2) {
   font-size: 20px;
-  color: #2c3e50;
+  color: #e2e8f0;
   margin: 20px 0 10px;
 }
 
 .markdown-preview :deep(h3) {
   font-size: 16px;
-  color: #34495e;
+  color: #cbd5e1;
   margin: 16px 0 8px;
 }
 
 .markdown-preview :deep(strong) {
-  color: #2c3e50;
+  color: #e2e8f0;
 }
 
 .markdown-preview :deep(ul) {
@@ -1614,7 +1631,7 @@ function moveOutline(index: number, direction: number) {
   max-height: 300px;
   overflow-y: auto;
   padding: 8px;
-  background: #fafafa;
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 6px;
 }
 
@@ -1630,23 +1647,23 @@ function moveOutline(index: number, direction: number) {
 }
 
 .chat-msg.user {
-  background: #ecf5ff;
+  background: rgba(64, 158, 255, 0.1);
   border-left: 3px solid #409eff;
 }
 
 .chat-msg.assistant {
-  background: #f0f9eb;
+  background: rgba(102, 126, 234, 0.12);
   border-left: 3px solid #67c23a;
 }
 
 .chat-role {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 2px;
 }
 
 .chat-text {
-  color: #303133;
+  color: #e2e8f0;
   line-height: 1.5;
 }
 
@@ -1654,12 +1671,12 @@ function moveOutline(index: number, direction: number) {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .refine-empty-hint {
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   line-height: 1.6;
   padding: 12px 0;
 }
@@ -1700,7 +1717,7 @@ function moveOutline(index: number, direction: number) {
 
 .content-stats {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   font-weight: normal;
 }
 
@@ -1712,7 +1729,7 @@ function moveOutline(index: number, direction: number) {
 
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 4px;
 }
 
@@ -1735,7 +1752,7 @@ function moveOutline(index: number, direction: number) {
 }
 
 .collapsed-label {
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   flex-shrink: 0;
 }
 
@@ -1744,12 +1761,12 @@ function moveOutline(index: number, direction: number) {
 }
 
 .collapsed-auto {
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   font-style: italic;
 }
 
 .collapsed-prompt {
-  color: #606266;
+  color: #cbd5e1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1775,7 +1792,7 @@ function moveOutline(index: number, direction: number) {
 
 .version-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   font-weight: normal;
 }
 
@@ -1795,11 +1812,11 @@ function moveOutline(index: number, direction: number) {
 }
 
 .version-item:hover {
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .version-item.is-current {
-  background: #f0f9eb;
+  background: rgba(102, 126, 234, 0.12);
 }
 
 .version-info {
@@ -1830,7 +1847,7 @@ function moveOutline(index: number, direction: number) {
 
 .version-label {
   font-size: 13px;
-  color: #303133;
+  color: #e2e8f0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1859,7 +1876,7 @@ function moveOutline(index: number, direction: number) {
   gap: 12px;
   margin-bottom: 16px;
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   font-size: 13px;
 }
@@ -1877,13 +1894,13 @@ function moveOutline(index: number, direction: number) {
 }
 
 .diff-arrow {
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .diff-content {
   max-height: 60vh;
   overflow-y: auto;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
@@ -1898,11 +1915,11 @@ function moveOutline(index: number, direction: number) {
 }
 
 .diff-added {
-  background: #e6ffec;
+  background: rgba(103, 194, 58, 0.12);
 }
 
 .diff-removed {
-  background: #ffebe9;
+  background: rgba(234, 84, 85, 0.15);
   text-decoration: line-through;
   opacity: 0.7;
 }
@@ -1910,7 +1927,7 @@ function moveOutline(index: number, direction: number) {
 .diff-indicator {
   width: 16px;
   flex-shrink: 0;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   font-weight: 600;
   user-select: none;
 }
@@ -1940,7 +1957,7 @@ function moveOutline(index: number, direction: number) {
 }
 
 .section-block:hover {
-  background: #fafbfc;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .section-toolbar {
@@ -1950,8 +1967,8 @@ function moveOutline(index: number, direction: number) {
   display: flex;
   gap: 4px;
   padding: 4px 6px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   z-index: 10;
@@ -1972,7 +1989,7 @@ function moveOutline(index: number, direction: number) {
   justify-content: center;
   gap: 10px;
   padding: 16px;
-  background: #f0f9ff;
+  background: rgba(102, 126, 234, 0.1);
   border: 1px dashed #409eff;
   border-radius: 6px;
   margin-bottom: 4px;
@@ -1998,9 +2015,9 @@ function moveOutline(index: number, direction: number) {
 .outline-item {
   padding: 12px;
   margin-bottom: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: #fafbfc;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .outline-item-header {
@@ -2045,14 +2062,14 @@ function moveOutline(index: number, direction: number) {
 
 .add-point-btn {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .add-section-btn {
   width: 100%;
   margin-top: 8px;
   font-size: 13px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .outline-actions {
@@ -2060,7 +2077,7 @@ function moveOutline(index: number, direction: number) {
   justify-content: flex-end;
   gap: 10px;
   padding-top: 16px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
   margin-top: 16px;
 }
 
@@ -2073,7 +2090,7 @@ function moveOutline(index: number, direction: number) {
 
 .custom-refine-hint {
   font-size: 13px;
-  color: #606266;
+  color: #cbd5e1;
   margin: 0;
 }
 </style>

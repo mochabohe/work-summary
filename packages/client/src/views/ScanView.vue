@@ -373,7 +373,7 @@ function goAnalysis() {
 
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 4px;
 }
 
@@ -383,7 +383,7 @@ function goAnalysis() {
 
 .progress-text {
   font-size: 13px;
-  color: #606266;
+  color: #cbd5e1;
   margin-top: 8px;
 }
 
@@ -407,7 +407,7 @@ function goAnalysis() {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   margin-bottom: 8px;
   transition: all 0.2s;
@@ -416,12 +416,12 @@ function goAnalysis() {
 
 .project-item:hover {
   border-color: #409eff;
-  background: #f5f7ff;
+  background: rgba(64, 158, 255, 0.1);
 }
 
 .project-item.selected {
   border-color: #409eff;
-  background: #ecf5ff;
+  background: rgba(64, 158, 255, 0.18);
 }
 
 .project-info {
@@ -430,7 +430,7 @@ function goAnalysis() {
 
 .project-name {
   font-weight: 600;
-  color: #303133;
+  color: #e2e8f0;
   margin-bottom: 4px;
   display: flex;
   align-items: center;
@@ -439,7 +439,7 @@ function goAnalysis() {
 
 .project-path {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 6px;
 }
 
@@ -450,7 +450,7 @@ function goAnalysis() {
 
 .project-stats {
   font-size: 13px;
-  color: #606266;
+  color: #cbd5e1;
   white-space: nowrap;
 }
 
@@ -463,7 +463,7 @@ function goAnalysis() {
 
 .selected-count {
   font-size: 14px;
-  color: #606266;
+  color: #cbd5e1;
 }
 
 .standalone-docs-section {
@@ -474,7 +474,7 @@ function goAnalysis() {
 
 .section-title {
   font-size: 14px;
-  color: #303133;
+  color: #e2e8f0;
   margin-bottom: 4px;
   display: flex;
   align-items: center;
@@ -483,7 +483,7 @@ function goAnalysis() {
 
 .section-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-bottom: 8px;
 }
 
@@ -498,13 +498,13 @@ function goAnalysis() {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: #f5f7fa;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   font-size: 13px;
 }
 
 .doc-name {
-  color: #606266;
+  color: #cbd5e1;
 }
 
 /* 目录浏览对话框 */
@@ -520,14 +520,15 @@ function goAnalysis() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: rgba(15, 12, 41, 0.5);
   border-radius: 6px;
   margin-bottom: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
 }
 
 .browser-current-path {
   font-size: 13px;
-  color: #303133;
+  color: #e2e8f0;
   word-break: break-all;
   flex: 1;
 }
@@ -535,8 +536,9 @@ function goAnalysis() {
 .browser-list {
   height: 320px;
   overflow-y: auto;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  border: 1px solid rgba(102, 126, 234, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 12, 41, 0.6);
 }
 
 .browser-empty {
@@ -544,7 +546,7 @@ function goAnalysis() {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.45);
   font-size: 13px;
 }
 
@@ -558,11 +560,11 @@ function goAnalysis() {
 }
 
 .browser-item:hover {
-  background: #f5f7ff;
+  background: rgba(102, 126, 234, 0.15);
 }
 
 .browser-item.active {
-  background: #ecf5ff;
+  background: rgba(102, 126, 234, 0.25);
 }
 
 .folder-icon {
@@ -572,7 +574,7 @@ function goAnalysis() {
 
 .folder-name {
   font-size: 13px;
-  color: #303133;
+  color: #e2e8f0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

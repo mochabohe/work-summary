@@ -1,5 +1,7 @@
-import simpleGit, { SimpleGit } from 'simple-git'
+import simpleGit, { SimpleGit, DefaultLogFields, LogResult, ListLogLine } from 'simple-git'
 import type { GitStats } from '@work-summary/shared'
+
+type LogEntry = DefaultLogFields & ListLogLine
 
 export class GitAnalyzer {
   /**
@@ -82,7 +84,7 @@ export class GitAnalyzer {
   /** 从 git log 结果构建统计数据 */
   private async buildStats(
     git: SimpleGit,
-    log: Awaited<ReturnType<SimpleGit['log']>>,
+    log: LogResult<DefaultLogFields>,
     author: string,
     since: string,
     until: string,
@@ -165,7 +167,7 @@ export class GitAnalyzer {
    * 这里找出与输入 author 精确匹配（忽略大小写）的 author_name 或 author_email
    */
   private findExactAuthor(
-    log: Awaited<ReturnType<SimpleGit['log']>>,
+    log: LogResult<DefaultLogFields>,
     author: string,
   ): string | null {
     const authorLower = author.toLowerCase()
@@ -203,7 +205,7 @@ export class GitAnalyzer {
    */
   private async buildStatsFromFiltered(
     git: SimpleGit,
-    commits: Awaited<ReturnType<SimpleGit['log']>>['all'],
+    commits: ReadonlyArray<LogEntry>,
     author: string,
     since: string,
     until: string,

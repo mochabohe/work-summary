@@ -169,7 +169,7 @@ function removeCustomRole(role: string) {
 
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 4px;
 }
 
@@ -184,7 +184,7 @@ function removeCustomRole(role: string) {
 }
 
 .date-separator {
-  color: #909399;
+  color: rgba(255, 255, 255, 0.55);
   flex-shrink: 0;
 }
 
