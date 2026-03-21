@@ -8,3 +8,6 @@ Thumbs.db
 *.log
 coverage
 .turbo
+.launcherhelper/
+packages/server/server.cjs
+release/
