@@ -1,6 +1,5 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { Worker } from 'worker_threads'
 import { EXCLUDED_DIRS, DOCUMENT_EXTENSIONS } from '@work-summary/shared'
 import type { DocumentContent } from '@work-summary/shared'
 import { DocxParser } from './docx-parser.js'
@@ -261,59 +260,29 @@ export class ParserService {
   }
 
   /**
-   * 在 Worker 线程中解析 HTML，避免正则阻塞主线程事件循环
-   * 超时后返回空字符串（跳过该文件）
+   * 从 HTML 中提取纯文本
+   * HTML 文件已限制 200KB，正则不会阻塞，直接同步执行，无需 Worker 线程
    */
-  private extractTextFromHtmlAsync(html: string, timeoutMs = 5000): Promise<string> {
-    return new Promise((resolve) => {
-      // Worker 代码：在独立线程中执行正则替换
-      const workerCode = `
-        const { workerData, parentPort } = require('worker_threads');
-        try {
-          const result = workerData
-            .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, '')
-            .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, '')
-            .replace(/<\\/(p|div|h[1-6]|li|tr|br\\s*\\/?)>/gi, '\\n')
-            .replace(/<br\\s*\\/?>/gi, '\\n')
-            .replace(/<[^>]+>/g, '')
-            .replace(/&nbsp;/gi, ' ')
-            .replace(/&amp;/gi, '&')
-            .replace(/&lt;/gi, '<')
-            .replace(/&gt;/gi, '>')
-            .replace(/&quot;/gi, '"')
-            .replace(/&#39;/gi, "'")
-            .replace(/\\n{3,}/g, '\\n\\n')
-            .trim();
-          parentPort.postMessage(result);
-        } catch {
-          parentPort.postMessage('');
-        }
-      `;
-
-      try {
-        const worker = new Worker(workerCode, { eval: true, workerData: html });
-
-        const timer = setTimeout(() => {
-          worker.terminate();
-          resolve('');
-        }, timeoutMs);
-
-        worker.on('message', (result: string) => {
-          clearTimeout(timer);
-          worker.terminate();
-          resolve(result);
-        });
-
-        worker.on('error', () => {
-          clearTimeout(timer);
-          worker.terminate();
-          resolve('');
-        });
-      } catch {
-        // Worker 创建失败，回退到空字符串
-        resolve('');
-      }
-    });
+  private extractTextFromHtmlAsync(html: string): Promise<string> {
+    try {
+      const result = html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+      return Promise.resolve(result)
+    } catch {
+      return Promise.resolve('')
+    }
   }
 
   /** 递归查找项目中的文档文件 */

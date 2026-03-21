@@ -12,9 +12,15 @@ export async function createApp() {
     logger: true,
   })
 
-  // 跨域
+  // 只允许 localhost/127.0.0.1 来源（Electron webview 同源无需 CORS，开发模式 Vite devserver 需要）
   await app.register(cors, {
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'), false)
+      }
+    },
   })
 
   // 注册路由

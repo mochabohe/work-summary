@@ -134,6 +134,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       success: true,
       data: task.result,
     }
+    // 结果被取走后 5 分钟自动清理，防止内存无限积累
+    setTimeout(() => scanTasks.delete(taskId), 5 * 60 * 1000)
     return reply.send(response)
   })
 }

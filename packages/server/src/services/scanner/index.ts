@@ -116,9 +116,10 @@ export class ScannerService {
         })
         try {
           // 单个文件解析超时 10 秒，避免大文件阻塞整个扫描
+          let timeoutHandle: ReturnType<typeof setTimeout>
           const doc = await Promise.race([
-            parser.parseFile(filePath),
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+            parser.parseFile(filePath).finally(() => clearTimeout(timeoutHandle)),
+            new Promise<null>((resolve) => { timeoutHandle = setTimeout(() => resolve(null), 10000) }),
           ])
           if (doc && doc.content.trim().length > 0) {
             standaloneDocuments.push(doc)

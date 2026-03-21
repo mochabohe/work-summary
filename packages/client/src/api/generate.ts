@@ -17,6 +17,11 @@ export function streamGenerate(
     signal: controller.signal,
   })
     .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        onError(`请求失败 (${response.status})${text ? ': ' + text.slice(0, 200) : ''}`)
+        return
+      }
       const reader = response.body?.getReader()
       if (!reader) {
         onError('无法获取响应流')
@@ -81,6 +86,11 @@ export function streamRefine(
     signal: controller.signal,
   })
     .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        onError(`请求失败 (${response.status})${text ? ': ' + text.slice(0, 200) : ''}`)
+        return
+      }
       const reader = response.body?.getReader()
       if (!reader) return
 
@@ -134,6 +144,11 @@ export function streamRefineSection(
     signal: controller.signal,
   })
     .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        onError(`请求失败 (${response.status})${text ? ': ' + text.slice(0, 200) : ''}`)
+        return
+      }
       const reader = response.body?.getReader()
       if (!reader) return
 
@@ -183,6 +198,11 @@ export function streamGenerateOutline(
     signal: controller.signal,
   })
     .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        onError(`请求失败 (${response.status})${text ? ': ' + text.slice(0, 200) : ''}`)
+        return
+      }
       const reader = response.body?.getReader()
       if (!reader) return
 
@@ -233,6 +253,11 @@ export function streamFromOutline(
     signal: controller.signal,
   })
     .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        onError(`请求失败 (${response.status})${text ? ': ' + text.slice(0, 200) : ''}`)
+        return
+      }
       const reader = response.body?.getReader()
       if (!reader) return
 

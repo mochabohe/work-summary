@@ -56,12 +56,14 @@ async function startServer(port: number): Promise<void> {
 
     let resolved = false
     let stderrOutput = ''
+    let fallbackTimer: ReturnType<typeof setTimeout>
 
     serverProcess.stdout?.on('data', (data: Buffer) => {
       const msg = data.toString()
       console.log('[Server]', msg)
       if (!resolved && (msg.includes('服务器启动成功') || msg.includes('listening'))) {
         resolved = true
+        clearTimeout(fallbackTimer)
         resolve()
       }
     })
@@ -75,6 +77,7 @@ async function startServer(port: number): Promise<void> {
     serverProcess.on('error', (err) => {
       if (!resolved) {
         resolved = true
+        clearTimeout(fallbackTimer)
         reject(err)
       }
     })
@@ -82,18 +85,30 @@ async function startServer(port: number): Promise<void> {
     serverProcess.on('exit', (code) => {
       if (code !== 0 && !resolved) {
         resolved = true
+        clearTimeout(fallbackTimer)
         const detail = stderrOutput ? `\n\n${stderrOutput.slice(0, 800)}` : ''
         reject(new Error(`Server exited with code ${code}${detail}`))
       }
     })
 
-    // 5 秒超时兜底
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true
-        resolve()
-      }
-    }, 5000)
+    // 超时兜底：若 15 秒内未收到 listening 输出，主动探测端口是否就绪
+    // 避免慢机器上 "5秒超时就假成功" 导致 window 打开时 server 还未监听
+    const fallbackTimer = setTimeout(() => {
+      if (resolved) return
+      const socket = net.createConnection({ port, host: '127.0.0.1' })
+      socket.on('connect', () => {
+        socket.destroy()
+        if (!resolved) { resolved = true; resolve() }
+      })
+      socket.on('error', () => {
+        socket.destroy()
+        if (!resolved) {
+          resolved = true
+          const detail = stderrOutput ? `\n\n${stderrOutput.slice(0, 800)}` : ''
+          reject(new Error(`服务器启动超时，无法连接端口 ${port}${detail}`))
+        }
+      })
+    }, 15000)
   })
 }
 
