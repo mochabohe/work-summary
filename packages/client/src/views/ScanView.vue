@@ -33,10 +33,17 @@
             <el-button
               type="primary"
               :loading="projectStore.scanning"
-              @click="startScan"
+              @click="startScan(false)"
               :disabled="folderPaths.length === 0"
             >
               {{ projectStore.scanning ? '扫描中...' : '开始扫描' }}
+            </el-button>
+            <el-button
+              :disabled="folderPaths.length === 0 || projectStore.scanning"
+              @click="startScan(true)"
+              title="忽略缓存，重新扫描"
+            >
+              刷新
             </el-button>
           </div>
           <div class="form-tip">支持添加多个文件夹路径，点击「选择文件夹」可视化浏览</div>
@@ -277,27 +284,36 @@ const progressText = computed(() => {
   }
 })
 
-async function startScan() {
+async function startScan(forceRescan = false) {
   if (folderPaths.value.length === 0) return
 
   projectStore.scanning = true
   progressInfo.value = null
-  // 新扫描时立即清除旧的生成结果和分析数据
   summaryStore.clearGenerated()
   projectStore.analyses = new Map()
 
   try {
-    const { taskId } = await apiStartScan(folderPaths.value, settings.gitAuthor, settings.getGitSince(), settings.getGitUntil())
+    const { taskId, fromCache, savedAt } = await apiStartScan(
+      folderPaths.value, settings.gitAuthor, settings.getGitSince(), settings.getGitUntil(), forceRescan,
+    )
     projectStore.taskId = taskId
+
+    // 命中缓存：直接取结果，无需 SSE
+    if (fromCache) {
+      const result = await getScanResult(taskId)
+      projectStore.setScanResult(result)
+      progressInfo.value = { phase: 'done', progress: 100, current: '', found: { projects: result.projects.length, files: result.totalFiles } }
+      const cacheTime = savedAt ? new Date(savedAt).toLocaleString() : '上次'
+      ElMessage.success(`使用缓存结果（${cacheTime}），发现 ${result.projects.length} 个项目`)
+      projectStore.scanning = false
+      return
+    }
 
     // 监听进度
     listenScanProgress(
       taskId,
-      (event) => {
-        progressInfo.value = event
-      },
+      (event) => { progressInfo.value = event },
       async () => {
-        // 扫描完成，更新进度到 100%
         progressInfo.value = { phase: 'done', progress: 100, current: '', found: progressInfo.value?.found ?? { projects: 0, files: 0 } }
         try {
           const result = await getScanResult(taskId)

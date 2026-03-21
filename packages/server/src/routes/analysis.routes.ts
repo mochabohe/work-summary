@@ -1,8 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { GitAnalyzer } from '../services/git/log-analyzer.js'
 import { ParserService } from '../services/parser/index.js'
-import { classifyCommits, scoreContribution, analyzeWorkPattern } from '../services/algorithm/index.js'
-import type { ApiResponse, ProjectAnalysis, AlgorithmInsights } from '@work-summary/shared'
+import { classifyCommits, scoreContribution, analyzeWorkPattern, extractHighlights } from '../services/algorithm/index.js'
+import type { ApiResponse, ProjectAnalysis, AlgorithmInsights, Highlight } from '@work-summary/shared'
 
 export const analysisRoutes: FastifyPluginAsync = async (app) => {
   // 分析单个项目
@@ -28,11 +28,13 @@ export const analysisRoutes: FastifyPluginAsync = async (app) => {
 
       // 如果有 Git 数据，运行算法分析
       let algorithmInsights: AlgorithmInsights | undefined
+      let highlights: Highlight[] | undefined
       if (gitStats) {
         const commitClusters = classifyCommits(gitStats.commitMessages)
         const contributionScore = scoreContribution(gitStats)
         const workPattern = analyzeWorkPattern(gitStats.commitTimeline)
         algorithmInsights = { commitClusters, contributionScore, workPattern }
+        highlights = extractHighlights(gitStats, algorithmInsights)
       }
 
       const analysis: ProjectAnalysis = {
@@ -48,6 +50,7 @@ export const analysisRoutes: FastifyPluginAsync = async (app) => {
         documents,
         codeStructure,
         algorithmInsights,
+        highlights,
       }
 
       const response: ApiResponse<ProjectAnalysis> = { success: true, data: analysis }

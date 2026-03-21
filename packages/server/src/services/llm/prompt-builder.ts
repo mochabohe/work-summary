@@ -271,6 +271,16 @@ ${starParsingGuide}
       'resume': '求职简历项目经验：按项目分组，每个项目突出技术栈、你的职责、核心贡献和量化成果，用简洁的 bullet point 描述，语言精炼有力，适合写入简历',
     }
 
+    // 每种文档类型的推荐章节结构
+    const docTypeStructureMap: Record<SummaryDocType, string> = {
+      'yearly-summary': '推荐结构：① 年度核心成果（量化指标） ② 重点项目回顾 ③ 技术成长与积累 ④ 协作与影响力 ⑤ 明年规划方向',
+      'quarterly-review': '推荐结构：① 季度目标与达成情况（对比） ② 关键项目进展 ③ 遇到的问题与解决方案 ④ 下季度重点计划',
+      'monthly-report': '推荐结构：① 本月完成事项（可度量） ② 进行中的工作 ③ 风险与阻塞 ④ 下月计划',
+      'promotion-report': '推荐结构：① 职责范围与核心贡献（STAR法则） ② 超出岗位要求的典型事例 ③ 能力成长的证明 ④ 对团队/业务的影响力',
+      'project-retro': '推荐结构：① 项目背景与目标 ② 我的职责与技术方案 ③ 关键挑战与解决过程 ④ 最终成果与量化收益 ⑤ 沉淀的经验',
+      'resume': '推荐结构：每个项目独立成节，包含：技术栈标签 / 项目简介（1句话） / 我的贡献（3-5条bullet） / 量化成果',
+    }
+
     const audienceMap: Record<SummaryAudience, string> = {
       'manager': '直属上级：关注业务价值、风险控制、可交付结果',
       'tech-lead': '技术负责人：关注技术方案、复杂问题处理、工程质量',
@@ -302,6 +312,7 @@ ${starParsingGuide}
     return [
       '## 写作目标',
       `- 文档类型：${docTypeMap[options.docType]}`,
+      `- 结构建议：${docTypeStructureMap[options.docType]}`,
       `- 目标读者：${audienceMap[options.audience]}`,
       `- 风格：${options.style === 'formal' ? '业务导向（弱化技术细节，标题从业务价值角度命名）' : '技术叙述（业务与技术并重，标题可包含技术方向和技术栈）'}`,
       `- 语气：${toneMap[options.tone]}`,

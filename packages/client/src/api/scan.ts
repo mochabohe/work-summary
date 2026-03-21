@@ -2,8 +2,14 @@ import api from './index'
 import type { ApiResponse, ScanResult } from '@work-summary/shared'
 
 /** 启动文件夹扫描 */
-export async function startScan(folderPaths: string[], gitAuthor?: string, startDate?: string, endDate?: string) {
-  const res = await api.post('/scan/start', { folderPaths, gitAuthor, startDate, endDate }) as unknown as ApiResponse<{ taskId: string }>
+export async function startScan(
+  folderPaths: string[],
+  gitAuthor?: string,
+  startDate?: string,
+  endDate?: string,
+  forceRescan = false,
+) {
+  const res = await api.post('/scan/start', { folderPaths, gitAuthor, startDate, endDate, forceRescan }) as unknown as ApiResponse<{ taskId: string; fromCache: boolean; savedAt?: number }>
   return res.data!
 }
 

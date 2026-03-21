@@ -1,18 +1,18 @@
 import OpenAI from 'openai'
 import { DEEPSEEK_CONFIG } from '@work-summary/shared'
+import type { ModelConfig } from '@work-summary/shared'
+import { AnthropicClient } from './anthropic-client.js'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-/** 判断错误是否可重试（网络错误、429、5xx） */
 function isRetriableError(err: unknown): boolean {
   if (err instanceof OpenAI.APIError) {
     const status = err.status
     return status === 429 || (status >= 500 && status < 600)
   }
-  // 网络错误（ECONNRESET、ETIMEDOUT、fetch 失败等）
   if (err instanceof Error) {
     const msg = err.message.toLowerCase()
     return msg.includes('econnreset') || msg.includes('etimedout')
@@ -22,7 +22,6 @@ function isRetriableError(err: unknown): boolean {
   return false
 }
 
-/** 延迟指定毫秒 */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -30,60 +29,78 @@ function sleep(ms: number): Promise<void> {
 const MAX_RETRIES = 2
 const BASE_DELAY_MS = 2000
 
-export class LLMService {
-  private client: OpenAI
+// 全局当前模型配置（可通过 setConfig 修改）
+let currentConfig: ModelConfig = {
+  provider: 'openai-compatible',
+  apiKey: process.env.DEEPSEEK_API_KEY || '',
+  baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
+  model: DEEPSEEK_CONFIG.defaultModel,
+}
 
-  constructor() {
-    this.client = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
+export function setLLMConfig(config: ModelConfig) {
+  currentConfig = config
+}
+
+export function getLLMConfig(): Omit<ModelConfig, 'apiKey'> & { apiKey: string } {
+  return { ...currentConfig, apiKey: currentConfig.apiKey ? '***' : '' }
+}
+
+export class LLMService {
+  private getOpenAIClient(): OpenAI {
+    return new OpenAI({
+      apiKey: currentConfig.apiKey,
+      baseURL: currentConfig.baseURL,
     })
   }
 
-  /** 流式对话，返回异步迭代器（含自动重试） */
-  async *streamChat(messages: ChatMessage[], model?: string, maxTokens?: number): AsyncGenerator<string> {
-    let lastError: unknown
+  private getAnthropicClient(): AnthropicClient {
+    return new AnthropicClient(currentConfig.apiKey, currentConfig.model)
+  }
 
+  async *streamChat(messages: ChatMessage[], _model?: string, maxTokens?: number): AsyncGenerator<string> {
+    if (currentConfig.provider === 'anthropic') {
+      yield* this.getAnthropicClient().streamChat(messages, maxTokens)
+      return
+    }
+
+    let lastError: unknown
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const stream = await this.client.chat.completions.create({
-          model: model || DEEPSEEK_CONFIG.defaultModel,
+        const stream = await this.getOpenAIClient().chat.completions.create({
+          model: currentConfig.model,
           messages,
           stream: true,
           ...(maxTokens ? { max_tokens: maxTokens } : {}),
         })
-
-        // 连接建立成功后，流式输出过程中不再重试（避免重复输出）
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content
-          if (content) {
-            yield content
-          }
+          if (content) yield content
         }
-        return // 正常完成，退出
+        return
       } catch (err) {
         lastError = err
         if (attempt < MAX_RETRIES && isRetriableError(err)) {
-          const delay = BASE_DELAY_MS * Math.pow(2, attempt) // 2s, 4s
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt)
           console.warn(`[LLM] streamChat 第 ${attempt + 1} 次失败，${delay / 1000}s 后重试:`, (err as Error).message)
           await sleep(delay)
           continue
         }
-        throw err // 不可重试或已用尽重试次数
+        throw err
       }
     }
-
     throw lastError
   }
 
-  /** 非流式对话（含自动重试） */
-  async chat(messages: ChatMessage[], model?: string): Promise<string> {
-    let lastError: unknown
+  async chat(messages: ChatMessage[], _model?: string): Promise<string> {
+    if (currentConfig.provider === 'anthropic') {
+      return this.getAnthropicClient().chat(messages)
+    }
 
+    let lastError: unknown
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await this.client.chat.completions.create({
-          model: model || DEEPSEEK_CONFIG.defaultModel,
+        const response = await this.getOpenAIClient().chat.completions.create({
+          model: currentConfig.model,
           messages,
         })
         return response.choices[0]?.message?.content || ''
@@ -98,15 +115,16 @@ export class LLMService {
         throw err
       }
     }
-
     throw lastError
   }
 
-  /** 验证代理是否可用 */
   async validate(): Promise<boolean> {
     try {
-      const response = await this.client.chat.completions.create({
-        model: DEEPSEEK_CONFIG.defaultModel,
+      if (currentConfig.provider === 'anthropic') {
+        return this.getAnthropicClient().validate()
+      }
+      const response = await this.getOpenAIClient().chat.completions.create({
+        model: currentConfig.model,
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 5,
       })

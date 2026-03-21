@@ -9,3 +9,5 @@ export type { TextQualityScore } from './text-quality-scorer.js'
 
 export { analyzeWorkPattern } from './work-pattern-analyzer.js'
 export type { WorkPattern, WorkPatternPhase } from './work-pattern-analyzer.js'
+
+export { extractHighlights } from './highlight-extractor.js'

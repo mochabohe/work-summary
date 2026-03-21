@@ -130,6 +130,28 @@
               </li>
             </ul>
           </div>
+
+          <!-- 亮点识别 -->
+          <div v-if="analysis.highlights?.length" class="highlights-section">
+            <h4>亮点识别</h4>
+            <div class="highlight-tags">
+              <el-tooltip
+                v-for="h in analysis.highlights"
+                :key="h.title"
+                :content="`${h.description}（${h.metric}）`"
+                placement="top"
+              >
+                <el-tag
+                  :type="highlightTagType(h.type)"
+                  :effect="h.priority === 'high' ? 'dark' : 'light'"
+                  size="default"
+                  class="highlight-tag"
+                >
+                  {{ highlightIcon(h.type) }} {{ h.title }}
+                </el-tag>
+              </el-tooltip>
+            </div>
+          </div>
         </el-card>
       </div>
 
@@ -160,6 +182,31 @@ const settings = useSettingsStore()
 const analysisProgress = ref(0)
 const currentProject = ref('')
 
+/** 亮点类型 -> el-tag type 映射 */
+function highlightTagType(type: string): 'success' | 'warning' | 'danger' | 'primary' | 'info' {
+  const map: Record<string, 'success' | 'warning' | 'danger' | 'primary' | 'info'> = {
+    productivity: 'success',
+    quality: 'warning',
+    optimization: 'primary',
+    sprint: 'danger',
+    feature: 'success',
+    domain: 'info',
+  }
+  return map[type] || 'info'
+}
+
+/** 亮点类型 -> emoji 图标 */
+function highlightIcon(type: string): string {
+  const map: Record<string, string> = {
+    productivity: '⚡',
+    quality: '🛡️',
+    optimization: '🔧',
+    sprint: '🚀',
+    feature: '✨',
+    domain: '🎯',
+  }
+  return map[type] || '⭐'
+}
 /** 只展示选中项目的分析结果 */
 const selectedAnalyses = computed(() => {
   const result: [string, any][] = []
@@ -334,6 +381,23 @@ h4 {
   color: #cbd5e1;
   padding-left: 20px;
   line-height: 1.8;
+}
+
+.highlights-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
+}
+
+.highlight-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.highlight-tag {
+  cursor: default;
+  font-size: 13px;
 }
 
 .action-bar {

@@ -218,13 +218,24 @@
               <!-- 写作控制 -->
               <div class="section">
                 <h4>写作控制</h4>
-                <div class="writing-grid">
-                  <div class="writing-item">
-                    <span class="writing-label">文档类型</span>
-                    <el-select v-model="summaryStore.docType" size="small">
-                      <el-option v-for="item in docTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-                    </el-select>
+                <!-- 文档类型卡片选择 -->
+                <div class="writing-item doc-type-section">
+                  <span class="writing-label">文档类型</span>
+                  <div class="doc-type-cards">
+                    <div
+                      v-for="item in docTypeOptions"
+                      :key="item.value"
+                      class="doc-type-card"
+                      :class="{ active: summaryStore.docType === item.value }"
+                      @click="summaryStore.docType = item.value"
+                    >
+                      <span class="doc-type-icon">{{ item.icon }}</span>
+                      <span class="doc-type-name">{{ item.label }}</span>
+                      <span class="doc-type-desc">{{ item.desc }}</span>
+                    </div>
                   </div>
+                </div>
+                <div class="writing-grid">
                   <div class="writing-item">
                     <span class="writing-label">目标读者</span>
                     <el-select v-model="summaryStore.audience" size="small">
@@ -503,11 +514,33 @@
       <!-- 操作栏 -->
       <div class="action-bar" v-if="summaryStore.content && !summaryStore.generating">
         <el-button @click="router.push('/feishu')">上一步</el-button>
-        <el-button type="primary" size="large" @click="router.push('/preview')">
-          下一步：预览导出
-        </el-button>
+        <div style="display:flex;gap:8px;">
+          <el-button @click="historyDrawerVisible = true">📋 历史记录</el-button>
+          <el-button type="primary" size="large" @click="router.push('/preview')">
+            下一步：预览导出
+          </el-button>
+        </div>
       </div>
     </template>
+
+    <!-- 历史记录抽屉 -->
+    <el-drawer v-model="historyDrawerVisible" title="生成历史" direction="rtl" size="360px">
+      <div class="history-list">
+        <el-empty v-if="historyEntries.length === 0" description="暂无历史记录" />
+        <div
+          v-for="entry in historyEntries"
+          :key="entry.id"
+          class="history-item"
+        >
+          <div class="history-item-header">
+            <span class="history-title">{{ entry.title }}</span>
+            <el-button type="danger" link size="small" @click="handleDeleteHistory(entry.id)">删除</el-button>
+          </div>
+          <div class="history-meta">{{ formatDate(entry.createdAt) }} · {{ entry.metadata.docType }}</div>
+          <el-button size="small" @click="handleRestoreHistory(entry.id)" style="margin-top:6px;">恢复此版本</el-button>
+        </div>
+      </div>
+    </el-drawer>
 
     <!-- 对话修改弹窗 -->
     <el-dialog
@@ -644,6 +677,7 @@ import { useProjectStore } from '@/stores/project'
 import { useSummaryStore } from '@/stores/summary'
 import { useSettingsStore } from '@/stores/settings'
 import { streamGenerate, streamRefine, streamRefineSection, streamGenerateOutline, streamFromOutline } from '@/api/generate'
+import { listHistory, saveHistory, getHistory, deleteHistory, type HistoryEntry } from '@/api/history'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -653,6 +687,36 @@ const settingsStore = useSettingsStore()
 const md = new MarkdownIt()
 const customDim = ref('')
 const refineInput = ref('')
+
+// ─── 历史记录 ─────────────────────────────────────────────────────────────────
+const historyDrawerVisible = ref(false)
+const historyEntries = ref<HistoryEntry[]>([])
+
+async function loadHistoryList() {
+  historyEntries.value = await listHistory().catch(() => [])
+}
+
+watch(historyDrawerVisible, (v) => { if (v) loadHistoryList() })
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+async function handleRestoreHistory(id: string) {
+  try {
+    await ElMessageBox.confirm('恢复此版本将覆盖当前内容，确认继续？', '恢复历史', { type: 'warning' })
+    const entry = await getHistory(id)
+    summaryStore.content = entry.content ?? ''
+    historyDrawerVisible.value = false
+    ElMessage.success('已恢复历史版本')
+  } catch {}
+}
+
+async function handleDeleteHistory(id: string) {
+  await deleteHistory(id)
+  historyEntries.value = historyEntries.value.filter(e => e.id !== id)
+}
+// ─────────────────────────────────────────────────────────────────────────────
 const refining = ref(false)
 const generateProgress = ref('')
 const refineDialogVisible = ref(false)
@@ -732,12 +796,12 @@ const styleOptions = [
 ]
 
 const docTypeOptions = [
-  { value: 'yearly-summary', label: '年终总结' },
-  { value: 'quarterly-review', label: '季度复盘' },
-  { value: 'monthly-report', label: '月度汇报' },
-  { value: 'promotion-report', label: '晋升述职' },
-  { value: 'project-retro', label: '项目复盘' },
-  { value: 'resume', label: '求职简历' },
+  { value: 'yearly-summary', label: '年终总结', icon: '🏆', desc: '年度价值沉淀' },
+  { value: 'quarterly-review', label: '季度复盘', icon: '📊', desc: '目标达成与改进' },
+  { value: 'monthly-report', label: '月度汇报', icon: '📅', desc: '进展与下月计划' },
+  { value: 'promotion-report', label: '晋升述职', icon: '🚀', desc: '能力跃迁与影响力' },
+  { value: 'project-retro', label: '项目复盘', icon: '🔍', desc: '决策过程与经验' },
+  { value: 'resume', label: '求职简历', icon: '📄', desc: '项目经验 bullet' },
 ] as const
 
 const audienceOptions = [
@@ -881,6 +945,25 @@ function generate() {
       summaryStore.saveVersion('初始生成')
       configCollapsed.value = true
       ElMessage.success('总结生成完成!')
+      // 自动保存到历史
+      const projects = projectStore.getSelectedAnalyses().map(a => a.project.name)
+      const docType = summaryStore.docType || 'yearly-summary'
+      const docTypeLabel: Record<string, string> = {
+        'yearly-summary': '年终总结', 'quarterly-review': '季度复盘',
+        'monthly-report': '月度汇报', 'promotion-report': '晋升述职',
+        'project-retro': '项目复盘', 'resume': '求职简历',
+      }
+      const title = `${docTypeLabel[docType] || docType} · ${new Date().toLocaleDateString('zh-CN')}`
+      saveHistory({
+        title,
+        content: summaryStore.content,
+        metadata: {
+          docType,
+          gitAuthor: settingsStore.gitAuthor || '',
+          dateRange: `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
+          projects,
+        },
+      }).catch(() => {})
     },
     (err) => {
       summaryStore.generating = false
@@ -1486,6 +1569,58 @@ function moveOutline(index: number, direction: number) {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.doc-type-section {
+  margin-bottom: 12px;
+}
+
+.doc-type-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.doc-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.doc-type-card:hover {
+  border-color: rgba(64, 158, 255, 0.5);
+  background: rgba(64, 158, 255, 0.08);
+}
+
+.doc-type-card.active {
+  border-color: #409eff;
+  background: rgba(64, 158, 255, 0.15);
+}
+
+.doc-type-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.doc-type-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.doc-type-desc {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  line-height: 1.3;
+}
+
 .selected-dims {
   display: flex;
   flex-wrap: wrap;
@@ -1777,6 +1912,40 @@ function moveOutline(index: number, direction: number) {
   margin-top: 24px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.history-item {
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.history-meta {
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
 }
 
 /* ===== 版本历史样式 ===== */

@@ -49,6 +49,7 @@ async function startServer(port: number): Promise<void> {
         DOTENV_PATH: envPath,
         CLIENT_DIST_PATH: clientPath,
         NODE_ENV: 'production',
+        APP_DATA_PATH: app.getPath('userData'),
       },
       cwd: path.dirname(serverEntry),
       stdio: ['pipe', 'pipe', 'pipe'],

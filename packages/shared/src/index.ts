@@ -104,6 +104,18 @@ export interface AlgorithmInsights {
 }
 
 // ============================
+// 亮点识别类型
+// ============================
+
+export interface Highlight {
+  type: 'productivity' | 'quality' | 'optimization' | 'sprint' | 'feature' | 'domain'
+  title: string
+  description: string
+  metric: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+// ============================
 // 项目分析类型
 // ============================
 
@@ -118,6 +130,18 @@ export interface ProjectAnalysis {
     keyFiles: { path: string; content: string }[]
   }
   algorithmInsights?: AlgorithmInsights
+  highlights?: Highlight[]
+}
+
+// ============================
+// 模型配置类型
+// ============================
+
+export interface ModelConfig {
+  provider: 'openai-compatible' | 'anthropic'
+  apiKey: string
+  baseURL?: string   // OpenAI 兼容时使用
+  model: string
 }
 
 // ============================
