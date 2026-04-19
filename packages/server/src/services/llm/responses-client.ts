@@ -110,25 +110,45 @@ export class OpenAIResponsesClient {
     }
   }
 
-  /** 从 Responses API 响应里提取所有输出文本 */
+  /** 从 Responses API 响应里提取所有输出文本（兼容多种代理实现） */
   private extractText(json: any): string {
     if (!json) return ''
-    // 优先：output_text 顶层字段（部分代理直接给）
-    if (typeof json.output_text === 'string') return json.output_text
+    // 优先 1：output_text 顶层字段（部分代理直接给）
+    if (typeof json.output_text === 'string' && json.output_text.trim()) return json.output_text
 
-    // 标准结构：output[*].content[*].text
+    // 优先 2：text 顶层字段（少数代理把内容直接放外层）
+    if (typeof json.text === 'string' && json.text.trim()) return json.text
+
+    // 标准结构：output 数组 → 遍历所有 type=message 的 item
     const output = json.output
     if (!Array.isArray(output)) return ''
     const parts: string[] = []
     for (const item of output) {
+      // 类型 message：标准
       if (item?.type === 'message' && Array.isArray(item.content)) {
         for (const c of item.content) {
-          if (c?.type === 'output_text' && typeof c.text === 'string') {
-            parts.push(c.text)
-          } else if (typeof c?.text === 'string') {
-            parts.push(c.text)
-          }
+          // type=output_text 是标准；text 是兼容字段
+          if (typeof c?.text === 'string') parts.push(c.text)
+          else if (typeof c?.content === 'string') parts.push(c.content)
         }
+      }
+      // 类型 text：直接是文本节点
+      else if (item?.type === 'text' && typeof item.text === 'string') {
+        parts.push(item.text)
+      }
+      // 类型 reasoning：reasoning 模型的中间推理（一般不展示，但作为 fallback）
+      else if (item?.type === 'reasoning' && Array.isArray(item.summary)) {
+        for (const s of item.summary) {
+          if (typeof s?.text === 'string') parts.push(`[reasoning] ${s.text}`)
+        }
+      }
+      // 兜底：item 本身有 text 字段
+      else if (typeof item?.text === 'string') {
+        parts.push(item.text)
+      }
+      // 兜底：item.content 是字符串
+      else if (typeof item?.content === 'string') {
+        parts.push(item.content)
       }
     }
     return parts.join('').trim()

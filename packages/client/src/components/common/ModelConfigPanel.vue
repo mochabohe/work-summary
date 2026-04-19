@@ -87,9 +87,16 @@
       </el-button>
       <el-button size="small" :loading="modelTesting" @click="testModel">测试连接</el-button>
       <el-button size="small" type="primary" @click="saveModel">保存</el-button>
-      <span v-if="modelTestResult && !modelReply" :class="modelTestResult === 'ok' ? 'ok' : 'err'">
-        {{ modelTestResult === 'ok' ? '✓ 连接正常' : '✗ ' + modelTestResult }}
-      </span>
+      <span v-if="modelTestResult === 'ok' && !modelReply" class="ok">✓ 连接正常</span>
+    </div>
+
+    <!-- 错误详情：完整可滚动 -->
+    <div v-if="modelTestResult && modelTestResult !== 'ok'" class="error-detail">
+      <div class="error-head">
+        <span>✗ 测试失败</span>
+        <el-button size="small" link @click="copyError">复制</el-button>
+      </div>
+      <pre>{{ modelTestResult }}</pre>
     </div>
 
     <!-- 已加载模型数量提示 -->
@@ -200,6 +207,14 @@ async function loadModels() {
   } finally {
     loadingModels.value = false
   }
+}
+
+function copyError() {
+  navigator.clipboard.writeText(modelTestResult.value).then(() => {
+    ElMessage.success('已复制错误信息')
+  }).catch(() => {
+    ElMessage.warning('复制失败，请手动选中复制')
+  })
 }
 
 async function testModel() {
@@ -355,4 +370,33 @@ async function saveModel() {
   cursor: help;
 }
 .hint-icon:hover { color: #a78bfa; }
+
+/* ==== 错误详情 ==== */
+.error-detail {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.error-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 600;
+}
+.error-detail pre {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+}
 </style>

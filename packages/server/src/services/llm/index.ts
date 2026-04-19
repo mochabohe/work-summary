@@ -190,16 +190,20 @@ export class LLMService {
           if (result.text && result.text.trim()) {
             return { valid: true, reply: result.text.trim(), modelUsed: result.modelUsed }
           }
-          // 文本为空但请求成功
-          const previewRaw = (() => {
-            try {
-              const s = JSON.stringify(result.raw)
-              return s.length > 300 ? s.slice(0, 300) + '...' : s
-            } catch { return String(result.raw) }
-          })()
+          // 文本为空但请求成功：dump 完整 output 结构帮助定位
+          const raw = result.raw ?? {}
+          const topKeys = Object.keys(raw).join(', ')
+          let outputDump = ''
+          try {
+            const outputJson = JSON.stringify(raw.output ?? raw, null, 2)
+            outputDump = outputJson.length > 1500 ? outputJson.slice(0, 1500) + '\n...(truncated)' : outputJson
+          } catch {
+            outputDump = '<failed to stringify>'
+          }
           return {
             valid: false,
-            error: `Responses API 返回但提取不到文本（output 结构不标准）。响应：${previewRaw}`,
+            error: `Responses API 调通了但提取不到文本。响应顶层字段: [${topKeys}]。`
+              + `output 字段完整内容:\n${outputDump}`,
           }
         } catch (err) {
           if (err instanceof ResponsesAPIError) {
