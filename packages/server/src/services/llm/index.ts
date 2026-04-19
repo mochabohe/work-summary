@@ -190,9 +190,18 @@ export class LLMService {
           if (result.text && result.text.trim()) {
             return { valid: true, reply: result.text.trim(), modelUsed: result.modelUsed }
           }
-          // 文本为空但请求成功：dump 完整 output 结构帮助定位
+          // 文本为空但请求成功：dump 完整 output + 关键诊断字段
           const raw = result.raw ?? {}
-          const topKeys = Object.keys(raw).join(', ')
+          const status = raw.status ?? '?'
+          const incompleteDetails = raw.incomplete_details
+            ? JSON.stringify(raw.incomplete_details)
+            : 'null'
+          const reasoningInfo = raw.reasoning
+            ? JSON.stringify(raw.reasoning).slice(0, 300)
+            : 'null'
+          const usage = raw.usage
+            ? `prompt=${raw.usage.input_tokens ?? raw.usage.prompt_tokens ?? '?'}, output=${raw.usage.output_tokens ?? raw.usage.completion_tokens ?? '?'}, reasoning=${raw.usage.reasoning_tokens ?? raw.usage.output_tokens_details?.reasoning_tokens ?? '?'}`
+            : '无 usage'
           let outputDump = ''
           try {
             const outputJson = JSON.stringify(raw.output ?? raw, null, 2)
@@ -200,10 +209,25 @@ export class LLMService {
           } catch {
             outputDump = '<failed to stringify>'
           }
+
+          // 给出针对性建议
+          const isEmptyOutput = Array.isArray(raw.output) && raw.output.length === 0
+          const isReasoningExhausted = raw.usage?.output_tokens_details?.reasoning_tokens > 0 && isEmptyOutput
+          const suggestion = isReasoningExhausted
+            ? '⚠️ 诊断：reasoning 模型把所有 token 用在推理上，没留给最终输出。已自动设置 reasoning.effort=low + max_output_tokens=2048，但仍不够——请在代理侧确认 max_output_tokens 上限是否被限制，或者把模型换成非 reasoning 模型测试。'
+            : isEmptyOutput
+              ? '⚠️ 诊断：output 数组为空。可能：(1) 模型实际不支持 Responses API，(2) 代理对该模型的实现有 bug，(3) status="incomplete" 见上方 incomplete_details。'
+              : ''
+
           return {
             valid: false,
-            error: `Responses API 调通了但提取不到文本。响应顶层字段: [${topKeys}]。`
-              + `output 字段完整内容:\n${outputDump}`,
+            error: `Responses API 调通了但提取不到文本。\n`
+              + `status: ${status}\n`
+              + `incomplete_details: ${incompleteDetails}\n`
+              + `usage: ${usage}\n`
+              + `reasoning: ${reasoningInfo}\n`
+              + `${suggestion}\n\n`
+              + `output 完整内容:\n${outputDump}`,
           }
         } catch (err) {
           if (err instanceof ResponsesAPIError) {

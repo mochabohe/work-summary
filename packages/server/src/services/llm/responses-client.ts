@@ -25,18 +25,25 @@ export class OpenAIResponsesClient {
   ) {}
 
   /** 非流式调用：返回完整文本 */
-  async chat(messages: ResponsesChatMessage[]): Promise<{ text: string; modelUsed: string; raw: any }> {
+  async chat(messages: ResponsesChatMessage[], opts?: { maxTokens?: number; reasoningEffort?: 'low' | 'medium' | 'high' }): Promise<{ text: string; modelUsed: string; raw: any }> {
     const url = this.joinPath(this.baseURL, '/responses')
+    const body: any = {
+      model: this.model,
+      input: messages,
+      // reasoning 模型 token 预算：默认给足 2048，避免推理消耗完后 output 为空
+      max_output_tokens: opts?.maxTokens ?? 2048,
+    }
+    // 如果是 reasoning 模型（gpt-5 / o1 / o3 系列），降低推理强度，留更多 token 给输出
+    if (this.looksLikeReasoningModel()) {
+      body.reasoning = { effort: opts?.reasoningEffort ?? 'low' }
+    }
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model: this.model,
-        input: messages,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!res.ok) {
@@ -49,6 +56,14 @@ export class OpenAIResponsesClient {
     return { text, modelUsed: json.model || this.model, raw: json }
   }
 
+  /** 检测是否是 reasoning 模型（需要特殊 token 预算） */
+  private looksLikeReasoningModel(): boolean {
+    const m = this.model.toLowerCase()
+    return m.startsWith('o1') || m.startsWith('o3')
+      || m.startsWith('gpt-5') || m.startsWith('gpt5')
+      || m.includes('reasoner') || m.includes('reasoning')
+  }
+
   /** 流式调用：异步生成器，每次 yield 一段 delta 文本 */
   async *streamChat(messages: ResponsesChatMessage[], maxTokens?: number): AsyncGenerator<string> {
     const url = this.joinPath(this.baseURL, '/responses')
@@ -56,8 +71,11 @@ export class OpenAIResponsesClient {
       model: this.model,
       input: messages,
       stream: true,
+      max_output_tokens: maxTokens ?? 4096,
     }
-    if (maxTokens) body.max_output_tokens = maxTokens
+    if (this.looksLikeReasoningModel()) {
+      body.reasoning = { effort: 'low' }
+    }
 
     const res = await fetch(url, {
       method: 'POST',
@@ -116,41 +134,45 @@ export class OpenAIResponsesClient {
     // 优先 1：output_text 顶层字段（部分代理直接给）
     if (typeof json.output_text === 'string' && json.output_text.trim()) return json.output_text
 
-    // 优先 2：text 顶层字段（少数代理把内容直接放外层）
+    // 优先 2：text 顶层字段（少数代理把内容直接放外层，但注意 text 也可能是 {format:...} 对象）
     if (typeof json.text === 'string' && json.text.trim()) return json.text
 
     // 标准结构：output 数组 → 遍历所有 type=message 的 item
     const output = json.output
-    if (!Array.isArray(output)) return ''
     const parts: string[] = []
-    for (const item of output) {
-      // 类型 message：标准
-      if (item?.type === 'message' && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          // type=output_text 是标准；text 是兼容字段
-          if (typeof c?.text === 'string') parts.push(c.text)
-          else if (typeof c?.content === 'string') parts.push(c.content)
+    if (Array.isArray(output)) {
+      for (const item of output) {
+        if (item?.type === 'message' && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (typeof c?.text === 'string') parts.push(c.text)
+            else if (typeof c?.content === 'string') parts.push(c.content)
+          }
         }
-      }
-      // 类型 text：直接是文本节点
-      else if (item?.type === 'text' && typeof item.text === 'string') {
-        parts.push(item.text)
-      }
-      // 类型 reasoning：reasoning 模型的中间推理（一般不展示，但作为 fallback）
-      else if (item?.type === 'reasoning' && Array.isArray(item.summary)) {
-        for (const s of item.summary) {
-          if (typeof s?.text === 'string') parts.push(`[reasoning] ${s.text}`)
+        else if (item?.type === 'text' && typeof item.text === 'string') {
+          parts.push(item.text)
         }
-      }
-      // 兜底：item 本身有 text 字段
-      else if (typeof item?.text === 'string') {
-        parts.push(item.text)
-      }
-      // 兜底：item.content 是字符串
-      else if (typeof item?.content === 'string') {
-        parts.push(item.content)
+        else if (item?.type === 'reasoning' && Array.isArray(item.summary)) {
+          for (const s of item.summary) {
+            if (typeof s?.text === 'string') parts.push(`[推理] ${s.text}`)
+          }
+        }
+        else if (typeof item?.text === 'string') parts.push(item.text)
+        else if (typeof item?.content === 'string') parts.push(item.content)
       }
     }
+
+    // 兜底 1：output 为空但有 reasoning.summary（reasoning 模型 token 耗尽场景）
+    if (parts.length === 0 && json.reasoning) {
+      const r = json.reasoning
+      if (Array.isArray(r.summary)) {
+        for (const s of r.summary) {
+          if (typeof s?.text === 'string') parts.push(`[仅返回推理] ${s.text}`)
+        }
+      } else if (typeof r.summary === 'string' && r.summary.trim()) {
+        parts.push(`[仅返回推理] ${r.summary}`)
+      }
+    }
+
     return parts.join('').trim()
   }
 
