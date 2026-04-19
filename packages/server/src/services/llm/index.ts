@@ -147,28 +147,64 @@ export class LLMService {
       })
       // 请求已返回：检查 choices 结构
       if (response && Array.isArray(response.choices) && response.choices.length > 0) {
-        const msg = response.choices[0]?.message
-        const content = msg?.content
+        const msg = response.choices[0]?.message as any
         const modelUsed = response.model || currentConfig.model
 
+        // 常规 content 字段（Chat Completions 标准）
+        const content = msg?.content
         if (content && typeof content === 'string' && content.trim().length > 0) {
           return { valid: true, reply: content.trim(), modelUsed }
         }
 
-        // 有 choices 但 message.content 缺失/为空——代理 bug 或模型名不被真实识别
+        // 兼容 reasoning 模型（DeepSeek-Reasoner / OpenAI o1 / o3 / gpt-5 系列）
+        // 这些模型把输出放在 reasoning_content 而不是 content
+        const reasoningContent = msg?.reasoning_content
+        if (reasoningContent && typeof reasoningContent === 'string' && reasoningContent.trim().length > 0) {
+          return {
+            valid: true,
+            reply: `[推理内容]\n${reasoningContent.trim()}`,
+            modelUsed,
+          }
+        }
+
+        // 兼容 refusal 字段（OpenAI 安全拒绝响应）
+        const refusal = msg?.refusal
+        if (refusal && typeof refusal === 'string') {
+          return { valid: false, error: `模型拒绝了请求：${refusal}` }
+        }
+
+        // 兼容 tool_calls（如果代理只允许函数调用模式）
+        if (Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0) {
+          return { valid: false, error: `模型只返回了 tool_calls 而非 content，可能该模型配置为强制函数调用` }
+        }
+
+        // 有 choices 但各种 content 字段都缺失——代理 bug 或 API 路径错位
         const usage = (response as any).usage
         const tokenHint = usage
-          ? `（usage: prompt=${usage.prompt_tokens} completion=${usage.completion_tokens}，说明模型生成了 token 但代理没把内容放进 content 字段）`
+          ? `（usage: prompt=${usage.prompt_tokens} completion=${usage.completion_tokens}，说明模型生成了 token 但代理没把内容放进 content/reasoning_content 字段）`
           : ''
         const replacementHint = modelUsed !== currentConfig.model
           ? ` 注意：代理把模型名替换成了 "${modelUsed}"。`
           : ''
+
+        // 检测 id 前缀：resp_ 说明走的是 Responses API（reasoning 模型）
+        const isResponsesApi = typeof response.id === 'string' && response.id.startsWith('resp_')
+        const apiHint = isResponsesApi
+          ? ` 响应 id 以 "resp_" 开头，说明代理把这个模型路由到了 Responses API（通常用于 o1/o3/gpt-5 等 reasoning 模型），但本应用只支持 Chat Completions API。`
+          : ''
+
+        // 列出 message 实际有的字段名，方便定位
+        const msgFields = msg && typeof msg === 'object'
+          ? Object.keys(msg).join(', ')
+          : '无'
+
         return {
           valid: false,
-          error: `代理返回了合法的 choices 结构但 message.content 为空${tokenHint}。`
-            + `${replacementHint}`
-            + `常见原因：(1) 模型名 "${currentConfig.model}" 该代理不真实支持，(2) 代理实现有 bug。`
-            + `建议换成 gpt-4o-mini / gpt-4o / deepseek-chat 等标准模型名测试。`,
+          error: `代理返回了合法的 choices 结构但 message 不含可读内容${tokenHint}。`
+            + `${replacementHint}${apiHint}`
+            + ` message 字段: [${msgFields}]。`
+            + `建议：(1) 换成标准 Chat Completions 模型（gpt-4o-mini / gpt-4o / deepseek-chat），`
+            + `(2) 或让代理商修复 "${currentConfig.model}" 的响应格式映射。`,
         }
       }
       // 返回 200 但没有 choices 字段：多半 baseURL 命中了代理的其他路径（如主页或错误页）
