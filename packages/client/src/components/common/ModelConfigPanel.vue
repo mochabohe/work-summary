@@ -89,7 +89,7 @@
         拉取模型列表
       </el-button>
       <el-button size="small" :loading="modelTesting" @click="testModel">测试连接</el-button>
-      <el-button size="small" type="primary" @click="saveModel">保存</el-button>
+      <el-button size="small" type="primary" :loading="modelSaving" @click="saveModel">保存</el-button>
       <span v-if="modelTestResult === 'ok' && !modelReply" class="ok">✓ 连接正常</span>
     </div>
 
@@ -138,6 +138,7 @@ const modelBaseURL = ref('')
 const modelApiKey = ref('')
 const apiType = ref<'chat' | 'responses'>('chat')
 const modelTesting = ref(false)
+const modelSaving = ref(false)
 const modelTestResult = ref('')
 const modelReply = ref('')
 const modelUsed = ref('')
@@ -280,15 +281,21 @@ async function saveModel() {
   if (!modelApiKey.value) { ElMessage.warning('请先填写 API Key'); return }
   const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
   const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
+  modelSaving.value = true
   try {
+    // 已测试通过的情况下跳过重复验证（保存秒响应，省一次推理费用）
+    const skipValidate = modelTestResult.value === 'ok'
     await api.post('/config/model', {
       provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
       apiType: provider === 'openai-compatible' ? apiType.value : undefined,
+      skipValidate,
     })
-    ElMessage.success('模型配置已保存')
+    ElMessage.success(skipValidate ? '✓ 模型配置已保存' : '✓ 模型配置已保存（已验证）')
     modelTestResult.value = 'ok'
   } catch (e: any) {
     ElMessage.error(e.message || '保存失败')
+  } finally {
+    modelSaving.value = false
   }
 }
 </script>

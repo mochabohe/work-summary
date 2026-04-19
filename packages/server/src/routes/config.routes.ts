@@ -54,7 +54,7 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // 设置模型配置并验证连通性
-  app.post<{ Body: ModelConfig }>('/model', async (request, reply) => {
+  app.post<{ Body: ModelConfig & { skipValidate?: boolean } }>('/model', async (request, reply) => {
     const config = request.body
     if (!config.provider || !config.apiKey || !config.model) {
       return reply.status(400).send({ success: false, error: '缺少必要的模型配置字段' })
@@ -64,6 +64,11 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
     }
 
     setLLMConfig(config)
+
+    // 已通过测试时跳过验证（保存秒响应，省一次模型调用费用 + 延迟）
+    if (config.skipValidate) {
+      return reply.send({ success: true, data: { valid: true } } as ApiResponse<{ valid: boolean }>)
+    }
 
     try {
       const llm = new LLMService()
