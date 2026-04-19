@@ -59,6 +59,8 @@ const pageTitles: Record<string, string> = {
   '/generate': '生成总结',
   '/preview': '预览导出',
   '/workspace': '工作空间',
+  '/workspace/import': '文档导入',
+  '/workspace/manual': '手动录入',
 }
 
 // 不同模式下步骤序列不同

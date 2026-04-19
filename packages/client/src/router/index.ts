@@ -50,6 +50,16 @@ const router = createRouter({
       name: 'workspace',
       component: () => import('@/views/WorkspaceView.vue'),
     },
+    {
+      path: '/workspace/import',
+      name: 'workspace-import',
+      component: () => import('@/views/WorkspaceImportView.vue'),
+    },
+    {
+      path: '/workspace/manual',
+      name: 'workspace-manual',
+      component: () => import('@/views/WorkspaceManualView.vue'),
+    },
   ],
 })
 

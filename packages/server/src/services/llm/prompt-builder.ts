@@ -400,7 +400,7 @@ ${options.format === 'star' ? `
 
     parts.push('# 工作数据')
 
-    const contributedProjects = request.projects.filter(
+    const contributedProjects = (request.projects ?? []).filter(
       (p) => p.gitStats && p.gitStats.totalCommits > 0,
     )
 

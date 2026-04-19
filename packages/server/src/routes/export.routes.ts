@@ -67,7 +67,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
   // 导出 PDF（从幻灯片 JSON 结构生成，与 PPTX 视觉一致）
   app.post<{
     Body: { slidesData: PptData; filename?: string; colors?: CustomColors }
-  }>('/pdf-slides', { config: { rawBody: false }, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+  }>('/pdf-slides', { bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
     let { slidesData, filename = 'work-summary', colors } = request.body
 
     if (!slidesData) {
@@ -96,7 +96,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
   // 导出 PPTX（从幻灯片 JSON 结构生成）
   app.post<{
     Body: { slidesData: PptData; filename?: string; colors?: CustomColors }
-  }>('/pptx', { config: { rawBody: false }, bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
+  }>('/pptx', { bodyLimit: 5 * 1024 * 1024 }, async (request, reply) => {
     let { slidesData, filename = 'work-summary', colors } = request.body
 
     // 数据验证与标准化
