@@ -72,6 +72,9 @@
       >
         <el-icon class="hint-icon"><InfoFilled /></el-icon>
       </el-tooltip>
+      <span v-if="autoRecommendedApiType" class="auto-tip">
+        💡 该模型推荐用 {{ autoRecommendedApiType === 'responses' ? 'Responses API' : 'Chat Completions' }}
+      </span>
     </div>
 
     <!-- 拉取模型列表（自定义或想确认其他 provider 时） -->
@@ -123,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { RefreshRight, InfoFilled } from '@element-plus/icons-vue'
 import api from '@/api/index'
@@ -161,6 +164,34 @@ const baseURLHint = computed(() => {
   if (/\/v\d+\/?$/.test(url)) return ''
   if (url.endsWith('/')) return ''
   return `大多数 OpenAI 兼容代理需要以 /v1 结尾，建议改为 ${url.replace(/\/$/, '')}/v1`
+})
+
+/** 根据模型名推荐 API 类型 */
+function detectRecommendedApiType(model: string): 'chat' | 'responses' {
+  const m = model.toLowerCase()
+  if (m.startsWith('o1') || m.startsWith('o3')
+      || m.startsWith('gpt-5') || m.startsWith('gpt5')
+      || m.includes('reasoner') || m.includes('reasoning')) {
+    return 'responses'
+  }
+  return 'chat'
+}
+
+/** 当前模型是否与所选 apiType 不匹配 */
+const autoRecommendedApiType = computed(() => {
+  if (!modelId.value) return null
+  const recommended = detectRecommendedApiType(modelId.value)
+  return recommended !== apiType.value ? recommended : null
+})
+
+// 切换模型时自动调整 apiType
+watch(modelId, (newModel) => {
+  if (!newModel) return
+  const recommended = detectRecommendedApiType(newModel)
+  if (recommended !== apiType.value) {
+    apiType.value = recommended
+    ElMessage.info(`检测到 ${recommended === 'responses' ? 'reasoning' : '普通'} 模型，已自动切换 API 类型为 ${recommended === 'responses' ? 'Responses API' : 'Chat Completions'}`)
+  }
 })
 
 function onProviderChange(p: string) {
@@ -370,6 +401,12 @@ async function saveModel() {
   cursor: help;
 }
 .hint-icon:hover { color: #a78bfa; }
+
+.auto-tip {
+  font-size: 11px;
+  color: #fbbf24;
+  margin-left: 4px;
+}
 
 /* ==== 错误详情 ==== */
 .error-detail {
