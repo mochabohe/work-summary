@@ -65,11 +65,11 @@
               <el-option
                 v-for="item in modelStore.availableModels"
                 :key="item.id"
-                :label="item.id"
+                :label="displayModelName(item)"
                 :value="item.id"
               >
                 <div class="footer-model-option">
-                  <span class="footer-model-option-name">{{ item.id }}</span>
+                  <span class="footer-model-option-name">{{ displayModelName(item) }}</span>
                 </div>
               </el-option>
             </el-select>
@@ -135,6 +135,10 @@ const modelStore = useModelStore()
 const modelDialogVisible = ref(false)
 const selectedModel = ref('')
 const switchingModel = ref(false)
+
+function displayModelName(item: { id: string; source?: 'env' | 'user' }): string {
+  return item.source === 'env' ? '系统预设' : item.id
+}
 
 function detectRecommendedApiType(model: string): 'chat' | 'responses' {
   const normalized = model.toLowerCase()

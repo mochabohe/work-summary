@@ -1,8 +1,18 @@
 import OpenAI from 'openai'
+import fs from 'fs'
+import path from 'path'
 import { DEEPSEEK_CONFIG } from '@work-summary/shared'
 import type { ModelConfig } from '@work-summary/shared'
 import { AnthropicClient } from './anthropic-client.js'
 import { OpenAIResponsesClient, ResponsesAPIError } from './responses-client.js'
+
+/**
+ * 用户手动添加的模型 profile 持久化路径。
+ * Electron 打包模式下 APP_DATA_PATH 指向用户的 userData 目录（由 electron/main.ts 注入）。
+ * 开发模式下 APP_DATA_PATH 未设置，默认写到项目根目录。
+ * 注意：此文件会明文存储 apiKey，和 history.json 一样级别。
+ */
+const USER_PROFILES_FILE = path.join(process.env.APP_DATA_PATH || '.', 'model-profiles.json')
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -42,6 +52,8 @@ let currentConfig: ModelConfig = {
 export interface SavedModelOption {
   id: string
   ownedBy?: string
+  /** env 预设 vs 用户手动添加；前端据此决定是否隐藏真实模型名 */
+  source?: 'env' | 'user'
 }
 
 interface SavedModelProfile extends ModelConfig {
@@ -75,19 +87,26 @@ function mergeModelOptions(existing: SavedModelOption[], incoming: SavedModelOpt
   const merged = new Map<string, SavedModelOption>()
   for (const item of [...existing, ...incoming]) {
     if (!item?.id) continue
+    const prev = merged.get(item.id)
     merged.set(item.id, {
       id: item.id,
-      ownedBy: item.ownedBy ?? merged.get(item.id)?.ownedBy ?? '',
+      ownedBy: item.ownedBy ?? prev?.ownedBy ?? '',
+      // env 标签优先保留：一旦被标记为 env 就不允许被后续 user 覆盖
+      source: prev?.source === 'env' ? 'env' : (item.source ?? prev?.source),
     })
   }
   return Array.from(merged.values()).sort((a, b) => a.id.localeCompare(b.id))
 }
 
-export function saveModelProfile(config: ModelConfig, models: SavedModelOption[] = []) {
+export function saveModelProfile(
+  config: ModelConfig,
+  models: SavedModelOption[] = [],
+  source: 'env' | 'user' = 'user',
+) {
   const profileId = buildProfileId(config)
   const profileModels = mergeModelOptions(
-    [{ id: config.model, ownedBy: config.provider }],
-    models,
+    [{ id: config.model, ownedBy: config.provider, source }],
+    models.map(m => ({ ...m, source: m.source ?? source })),
   )
 
   const nextProfile: SavedModelProfile = {
@@ -107,6 +126,11 @@ export function saveModelProfile(config: ModelConfig, models: SavedModelOption[]
     }
   } else {
     savedModelProfiles.push(nextProfile)
+  }
+
+  // 只持久化 user profile，env profile 每次启动都从 .env 重建
+  if (source === 'user') {
+    persistUserProfilesToDisk()
   }
 }
 
@@ -139,6 +163,34 @@ export function canQuickSwitchModels(): boolean {
   return savedModelProfiles.length > 0
 }
 
+/** 读取磁盘上的用户 profile（source='user'）；读不到返回空数组 */
+function loadUserProfilesFromDisk(): SavedModelProfile[] {
+  try {
+    if (!fs.existsSync(USER_PROFILES_FILE)) return []
+    const raw = fs.readFileSync(USER_PROFILES_FILE, 'utf-8')
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((p): p is SavedModelProfile =>
+      p && typeof p === 'object' && typeof p.apiKey === 'string' && typeof p.model === 'string',
+    )
+  } catch (err) {
+    console.warn('[LLM] 读取 user profile 磁盘文件失败:', (err as Error).message)
+    return []
+  }
+}
+
+/** 把当前内存里 source='user' 的 profile 持久化到磁盘 */
+function persistUserProfilesToDisk(): void {
+  try {
+    const userProfiles = savedModelProfiles.filter(profile =>
+      profile.models.some(m => m.source === 'user'),
+    )
+    fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(userProfiles, null, 2), 'utf-8')
+  } catch (err) {
+    console.warn('[LLM] 写入 user profile 磁盘文件失败:', (err as Error).message)
+  }
+}
+
 /**
  * 从 .env 读取 MODEL_GPT_* / MODEL_CLAUDE_* 两组默认 profile，
  * 注册到 savedModelProfiles 并把第一组设为当前 currentConfig。
@@ -148,6 +200,14 @@ export function canQuickSwitchModels(): boolean {
  * 必须在 dotenv.config() 之后调用。
  */
 export function bootstrapDefaultProfiles(): void {
+  // 1. 先从磁盘恢复用户 profile
+  const diskProfiles = loadUserProfilesFromDisk()
+  if (diskProfiles.length > 0) {
+    savedModelProfiles = diskProfiles
+    console.log(`[LLM] 从磁盘恢复 ${diskProfiles.length} 个用户 profile`)
+  }
+
+  // 2. 再注册 env 预设（同 profileId 时 env 覆盖 user，保证预设总是生效）
   const readEnvProfile = (prefix: 'GPT' | 'CLAUDE'): ModelConfig | null => {
     const provider = process.env[`MODEL_${prefix}_PROVIDER`] as ModelConfig['provider'] | undefined
     const apiKey = process.env[`MODEL_${prefix}_API_KEY`]
@@ -172,13 +232,13 @@ export function bootstrapDefaultProfiles(): void {
 
   const gpt = readEnvProfile('GPT')
   if (gpt) {
-    saveModelProfile(gpt, [{ id: gpt.model, ownedBy: gpt.provider }])
+    saveModelProfile(gpt, [{ id: gpt.model, ownedBy: gpt.provider, source: 'env' }], 'env')
     registered.push(gpt)
   }
 
   const claude = readEnvProfile('CLAUDE')
   if (claude) {
-    saveModelProfile(claude, [{ id: claude.model, ownedBy: claude.provider }])
+    saveModelProfile(claude, [{ id: claude.model, ownedBy: claude.provider, source: 'env' }], 'env')
     registered.push(claude)
   }
 
@@ -190,7 +250,7 @@ export function bootstrapDefaultProfiles(): void {
       baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
       model: DEEPSEEK_CONFIG.defaultModel,
     }
-    saveModelProfile(deepseek, [{ id: deepseek.model, ownedBy: deepseek.provider }])
+    saveModelProfile(deepseek, [{ id: deepseek.model, ownedBy: deepseek.provider, source: 'env' }], 'env')
     registered.push(deepseek)
   }
 

@@ -5,6 +5,8 @@ import api from '@/api/index'
 export interface QuickModelOption {
   id: string
   ownedBy?: string
+  /** env 预设 vs 用户手动添加；决定下拉展示名 */
+  source?: 'env' | 'user'
 }
 
 type ApiType = 'chat' | 'responses'
@@ -38,9 +40,11 @@ export const useModelStore = defineStore('model', () => {
     const merged = new Map<string, QuickModelOption>()
     for (const item of models) {
       if (!item?.id) continue
+      const prev = merged.get(item.id)
       merged.set(item.id, {
         id: item.id,
-        ownedBy: item.ownedBy ?? merged.get(item.id)?.ownedBy ?? '',
+        ownedBy: item.ownedBy ?? prev?.ownedBy ?? '',
+        source: prev?.source === 'env' ? 'env' : (item.source ?? prev?.source),
       })
     }
     return Array.from(merged.values()).sort((a, b) => a.id.localeCompare(b.id))

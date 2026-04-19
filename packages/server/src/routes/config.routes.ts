@@ -96,7 +96,7 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
     setLLMConfig(config)
 
     if (config.skipValidate) {
-      saveModelProfile(config, availableModels)
+      saveModelProfile(config, availableModels, 'user')
       return reply.send({ success: true, data: { valid: true } } as ApiResponse<{ valid: boolean }>)
     }
 
@@ -110,7 +110,7 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
         })
       }
 
-      saveModelProfile(config, availableModels)
+      saveModelProfile(config, availableModels, 'user')
       return reply.send({
         success: true,
         data: {
