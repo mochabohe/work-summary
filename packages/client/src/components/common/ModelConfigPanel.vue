@@ -19,6 +19,9 @@
       placeholder="Base URL，如 https://api.openai.com/v1"
       style="margin-top:8px;"
     />
+    <div v-if="modelProvider === 'custom' && baseURLHint" class="base-url-hint">
+      💡 {{ baseURLHint }}
+    </div>
     <el-input
       v-model="modelApiKey"
       size="small"
@@ -39,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
@@ -62,6 +65,15 @@ const providerBaseURLMap: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   anthropic: '',
 }
+
+/** 检测用户填写的 baseURL 是否可能遗漏 /v1 后缀 */
+const baseURLHint = computed(() => {
+  const url = modelBaseURL.value.trim()
+  if (!url) return ''
+  if (/\/v\d+\/?$/.test(url)) return ''
+  if (url.endsWith('/')) return ''
+  return `大多数 OpenAI 兼容代理需要以 /v1 结尾，建议改为 ${url.replace(/\/$/, '')}/v1`
+})
 
 function onProviderChange(p: string) {
   if (modelPresets[p]?.length) modelId.value = modelPresets[p][0]
@@ -116,6 +128,12 @@ async function saveModel() {
   margin-top: 8px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.45);
+  line-height: 1.6;
+}
+.base-url-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fbbf24;
   line-height: 1.6;
 }
 </style>

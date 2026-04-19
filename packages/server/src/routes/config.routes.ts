@@ -33,9 +33,12 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const llm = new LLMService()
-      const valid = await llm.validate()
-      if (!valid) {
-        return reply.status(400).send({ success: false, error: '模型连接验证失败，请检查 API Key 和 URL 是否正确' })
+      const result = await llm.validateVerbose()
+      if (!result.valid) {
+        return reply.status(400).send({
+          success: false,
+          error: result.error ?? '模型连接验证失败，请检查 API Key 和 URL 是否正确',
+        })
       }
       return reply.send({ success: true, data: { valid: true } } as ApiResponse<{ valid: boolean }>)
     } catch (err) {

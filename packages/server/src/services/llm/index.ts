@@ -119,18 +119,50 @@ export class LLMService {
   }
 
   async validate(): Promise<boolean> {
+    // 保留布尔返回给调用方做快速判断；validateVerbose 给出详细失败原因
+    const result = await this.validateVerbose()
+    return result.valid
+  }
+
+  /**
+   * 详细验证：不吞错误，返回明确的失败原因。
+   *
+   * 判定策略：
+   * - 只要请求能收到 HTTP 2xx 响应（即 baseURL/apiKey 均合法）即算通过
+   * - 不强制 content 非空——某些代理在 max_tokens 过小时可能返回空字符串
+   */
+  async validateVerbose(): Promise<{ valid: boolean; error?: string }> {
     try {
       if (currentConfig.provider === 'anthropic') {
-        return this.getAnthropicClient().validate()
+        const ok = await this.getAnthropicClient().validate()
+        return { valid: ok, error: ok ? undefined : 'Anthropic 验证失败' }
       }
       const response = await this.getOpenAIClient().chat.completions.create({
         model: currentConfig.model,
         messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 5,
+        max_tokens: 16,
       })
-      return !!response.choices[0]?.message?.content
-    } catch {
-      return false
+      // 请求已返回：视为连接/鉴权/模型名均通过
+      if (response && response.choices) {
+        return { valid: true }
+      }
+      return { valid: false, error: '响应结构异常，未返回 choices' }
+    } catch (err: unknown) {
+      // OpenAI SDK APIError 包含 status + message
+      if (err instanceof OpenAI.APIError) {
+        const status = err.status
+        const hint = status === 401 ? 'API Key 无效'
+          : status === 404 ? `模型 "${currentConfig.model}" 不存在或路径错误（常见：baseURL 缺 /v1 后缀）`
+          : status === 403 ? '权限不足或 API Key 未开通该模型'
+          : status === 429 ? '请求过于频繁，稍后再试'
+          : `HTTP ${status}`
+        return { valid: false, error: `${hint}：${err.message}` }
+      }
+      const msg = (err as Error)?.message || String(err)
+      if (/ENOTFOUND|ECONNREFUSED|fetch failed|getaddrinfo/i.test(msg)) {
+        return { valid: false, error: `网络错误（检查 baseURL）：${msg}` }
+      }
+      return { valid: false, error: msg }
     }
   }
 }
