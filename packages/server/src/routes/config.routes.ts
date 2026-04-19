@@ -40,7 +40,14 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
           error: result.error ?? '模型连接验证失败，请检查 API Key 和 URL 是否正确',
         })
       }
-      return reply.send({ success: true, data: { valid: true } } as ApiResponse<{ valid: boolean }>)
+      return reply.send({
+        success: true,
+        data: {
+          valid: true,
+          reply: result.reply,
+          modelUsed: result.modelUsed,
+        },
+      } as ApiResponse<{ valid: boolean; reply?: string; modelUsed?: string }>)
     } catch (err) {
       return reply.status(400).send({ success: false, error: `验证失败: ${(err as Error).message}` })
     }

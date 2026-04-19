@@ -119,19 +119,19 @@ export class LLMService {
   }
 
   async validate(): Promise<boolean> {
-    // 保留布尔返回给调用方做快速判断；validateVerbose 给出详细失败原因
     const result = await this.validateVerbose()
     return result.valid
   }
 
   /**
-   * 详细验证：不吞错误，返回明确的失败原因。
+   * 详细验证：不吞错误，返回明确的失败原因 + 模型真实回复样例。
    *
    * 判定策略：
    * - 只要请求能收到 HTTP 2xx 响应（即 baseURL/apiKey 均合法）即算通过
    * - 不强制 content 非空——某些代理在 max_tokens 过小时可能返回空字符串
+   * - 成功时返回模型实际回复内容供用户直观验证
    */
-  async validateVerbose(): Promise<{ valid: boolean; error?: string }> {
+  async validateVerbose(): Promise<{ valid: boolean; error?: string; reply?: string; modelUsed?: string }> {
     try {
       if (currentConfig.provider === 'anthropic') {
         const ok = await this.getAnthropicClient().validate()
@@ -139,19 +139,23 @@ export class LLMService {
       }
       const response = await this.getOpenAIClient().chat.completions.create({
         model: currentConfig.model,
-        messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 16,
+        messages: [
+          { role: 'system', content: '你是一个测试助手。用一句话（不超过 30 字）回复用户，证明你在工作。' },
+          { role: 'user', content: '请简短介绍你自己，并告诉我你是什么模型。' },
+        ],
+        max_tokens: 80,
       })
       // 请求已返回：视为连接/鉴权/模型名均通过
       if (response && response.choices) {
-        return { valid: true }
+        const reply = response.choices[0]?.message?.content?.trim() || '（模型未返回内容）'
+        const modelUsed = response.model || currentConfig.model
+        return { valid: true, reply, modelUsed }
       }
       // 返回 200 但没有 choices 字段：多半 baseURL 命中了代理的其他路径（如主页或错误页）
       const baseURL = currentConfig.baseURL ?? ''
       const urlHint = baseURL && !/\/v\d+\/?$/.test(baseURL.replace(/\/$/, ''))
         ? `（baseURL "${baseURL}" 未以 /v1 结尾，尝试改为 "${baseURL.replace(/\/$/, '')}/v1" 后重试）`
         : ''
-      // 附带响应体摘要，便于定位代理返回的实际内容
       const bodyPreview = (() => {
         try {
           const s = JSON.stringify(response)

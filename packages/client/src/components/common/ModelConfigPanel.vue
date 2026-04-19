@@ -33,9 +33,24 @@
     <div class="model-actions">
       <el-button size="small" :loading="modelTesting" @click="testModel">测试连接</el-button>
       <el-button size="small" type="primary" @click="saveModel">保存</el-button>
-      <span v-if="modelTestResult" :class="modelTestResult === 'ok' ? 'ok' : 'err'">
+      <span v-if="modelTestResult && !modelReply" :class="modelTestResult === 'ok' ? 'ok' : 'err'">
         {{ modelTestResult === 'ok' ? '✓ 连接正常' : '✗ ' + modelTestResult }}
       </span>
+    </div>
+
+    <!-- 模型真实回复（会话测试） -->
+    <div v-if="modelReply" class="chat-result">
+      <div class="chat-head">
+        <span class="ok">✓ 连接成功</span>
+        <span v-if="modelUsed" class="model-used">实际响应模型：<strong>{{ modelUsed }}</strong></span>
+      </div>
+      <div class="chat-bubble">
+        <div class="chat-label">🤖 模型回复：</div>
+        <div class="chat-content">{{ modelReply }}</div>
+      </div>
+      <div v-if="modelUsed && requestedModel && modelUsed !== requestedModel" class="warn">
+        ⚠️ 注意：你请求的是「{{ requestedModel }}」，但代理实际返回的是「{{ modelUsed }}」——该代理可能进行了模型替换
+      </div>
     </div>
     <div class="tip">切换模型后点击"测试连接"确认可用，再"保存"生效</div>
   </div>
@@ -53,6 +68,9 @@ const modelBaseURL = ref('')
 const modelApiKey = ref('')
 const modelTesting = ref(false)
 const modelTestResult = ref('')
+const modelReply = ref('')
+const modelUsed = ref('')
+const requestedModel = ref('')
 
 const modelPresets: Record<string, string[]> = {
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
@@ -79,19 +97,30 @@ function onProviderChange(p: string) {
   if (modelPresets[p]?.length) modelId.value = modelPresets[p][0]
   if (p !== 'custom') modelBaseURL.value = ''
   modelTestResult.value = ''
+  modelReply.value = ''
+  modelUsed.value = ''
 }
 
 async function testModel() {
   if (!modelApiKey.value) { ElMessage.warning('请先填写 API Key'); return }
   modelTesting.value = true
   modelTestResult.value = ''
+  modelReply.value = ''
+  modelUsed.value = ''
+  requestedModel.value = modelId.value
   try {
     const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
     const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
     const res = await api.post('/config/model', {
       provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
-    }) as unknown as ApiResponse<{ valid: boolean }>
-    modelTestResult.value = res.data?.valid ? 'ok' : '连接失败'
+    }) as unknown as ApiResponse<{ valid: boolean; reply?: string; modelUsed?: string }>
+    if (res.data?.valid) {
+      modelTestResult.value = 'ok'
+      modelReply.value = res.data.reply ?? ''
+      modelUsed.value = res.data.modelUsed ?? ''
+    } else {
+      modelTestResult.value = '连接失败'
+    }
   } catch (e: any) {
     modelTestResult.value = e.message || '连接失败'
   } finally {
@@ -132,6 +161,58 @@ async function saveModel() {
 }
 .base-url-hint {
   margin-top: 4px;
+  font-size: 11px;
+  color: #fbbf24;
+  line-height: 1.6;
+}
+
+/* ==== 会话测试结果 ==== */
+.chat-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 10px;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.model-used {
+  color: rgba(255, 255, 255, 0.6);
+}
+.model-used strong {
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+.chat-bubble {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.chat-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.chat-content {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.warn {
+  margin-top: 8px;
   font-size: 11px;
   color: #fbbf24;
   line-height: 1.6;
