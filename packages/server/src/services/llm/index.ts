@@ -151,9 +151,16 @@ export class LLMService {
       const urlHint = baseURL && !/\/v\d+\/?$/.test(baseURL.replace(/\/$/, ''))
         ? `（baseURL "${baseURL}" 未以 /v1 结尾，尝试改为 "${baseURL.replace(/\/$/, '')}/v1" 后重试）`
         : ''
+      // 附带响应体摘要，便于定位代理返回的实际内容
+      const bodyPreview = (() => {
+        try {
+          const s = JSON.stringify(response)
+          return s.length > 300 ? s.slice(0, 300) + '...' : s
+        } catch { return String(response) }
+      })()
       return {
         valid: false,
-        error: `接口返回 200 但响应结构不含 choices 字段，baseURL 可能命中了代理的其他路径${urlHint}`,
+        error: `接口返回 200 但响应结构不含 choices 字段${urlHint}。实际响应：${bodyPreview}`,
       }
     } catch (err: unknown) {
       // OpenAI SDK APIError 包含 status + message
