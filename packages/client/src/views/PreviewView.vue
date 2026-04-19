@@ -86,7 +86,7 @@
             :loading="exporting === 'ppt'"
           >
             <el-icon><Document /></el-icon>
-            导出演示文稿
+            严格忠于正文 PPT
           </el-button>
 
           <el-button
@@ -102,14 +102,48 @@
           <el-button
             type="danger"
             size="large"
-            @click="handleBaiduPptExport"
+            @click="openBaiduPptStyleDialog"
             :loading="exporting === 'baidu-ppt'"
             :disabled="!baiduPptAvailable"
           >
-            ✨ AI 精美演示文稿
+            ✨ AI 重构美化版 PPT
           </el-button>
         </div>
       </el-card>
+
+      <el-dialog
+        v-model="baiduPptStyleVisible"
+        title="选择演示文稿风格"
+        width="520"
+        :close-on-click-modal="false"
+      >
+        <el-form label-position="top">
+          <el-form-item label="模板风格">
+            <el-select
+              v-model="selectedBaiduPptCategory"
+              style="width: 100%;"
+              placeholder="选择风格"
+              :loading="baiduPptThemesLoading"
+            >
+              <el-option label="自动推荐" value="" />
+              <el-option
+                v-for="category in baiduPptCategories"
+                :key="category"
+                :label="category"
+                :value="category"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div class="baidu-style-hint">
+          <span v-if="selectedBaiduPptCategory">当前将优先使用“{{ selectedBaiduPptCategory }}”风格模板。</span>
+          <span v-else>当前为自动推荐，系统会根据总结内容匹配合适风格。</span>
+        </div>
+        <template #footer>
+          <el-button @click="baiduPptStyleVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleBaiduPptExport">开始生成</el-button>
+        </template>
+      </el-dialog>
 
       <!-- 百度 AI PPT 进度对话框 -->
       <el-dialog
@@ -371,8 +405,8 @@ import { ElMessage } from 'element-plus'
 import { Document, CopyDocument, Loading, SuccessFilled } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useSummaryStore } from '@/stores/summary'
-import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides, checkBaiduPptStatus, exportBaiduPpt, downloadFromUrl } from '@/api/exportApi'
-import type { PptData, CustomColors } from '@/api/exportApi'
+import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides, checkBaiduPptStatus, exportBaiduPpt, downloadFromUrl, fetchBaiduPptThemes } from '@/api/exportApi'
+import type { PptData, CustomColors, BaiduPptTheme } from '@/api/exportApi'
 
 const router = useRouter()
 const summaryStore = useSummaryStore()
@@ -630,6 +664,7 @@ function handlePptExport() {
       // 在流式输出中插入进度分隔线
       pptStreamText.value += '\n\n' + message + '\n'
     },
+    { strict: true },
   )
 }
 
@@ -682,12 +717,51 @@ const baiduPptOutline = ref('')
 const baiduPptUrl = ref('')
 const baiduPptDone = ref(false)
 const baiduPptError = ref(false)
+const baiduPptStyleVisible = ref(false)
+const baiduPptThemesLoading = ref(false)
+const baiduPptThemes = ref<BaiduPptTheme[]>([])
+const selectedBaiduPptCategory = ref('')
 let cancelBaiduPptFn: (() => void) | null = null
 
 // 启动时检查百度 API 是否可用
 checkBaiduPptStatus().then((ok) => { baiduPptAvailable.value = ok })
 
+const baiduPptCategories = computed(() => {
+  const set = new Set<string>()
+  for (const theme of baiduPptThemes.value) {
+    for (const name of theme.style_name_list || []) {
+      if (name && name !== '默认') set.add(name)
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+
+async function openBaiduPptStyleDialog() {
+  selectedBaiduPptCategory.value = ''
+
+  if (baiduPptThemesLoading.value) return
+
+  if (baiduPptThemes.value.length === 0) {
+    baiduPptThemesLoading.value = true
+    try {
+      baiduPptThemes.value = await fetchBaiduPptThemes()
+    } catch (err) {
+      ElMessage.warning(`加载 PPT 风格失败，将继续使用自动推荐：${(err as Error).message}`)
+    } finally {
+      baiduPptThemesLoading.value = false
+    }
+  }
+
+  if (baiduPptCategories.value.length === 0) {
+    handleBaiduPptExport()
+    return
+  }
+
+  baiduPptStyleVisible.value = true
+}
+
 function handleBaiduPptExport() {
+  baiduPptStyleVisible.value = false
   exporting.value = 'baidu-ppt'
   baiduPptStatus.value = '正在连接百度 AI PPT 服务...'
   baiduPptOutline.value = ''
@@ -714,7 +788,10 @@ function handleBaiduPptExport() {
       exporting.value = ''
       ElMessage.error(`AI PPT 生成失败: ${err}`)
     },
-    { filename: exportFilename.value },
+    {
+      filename: exportFilename.value,
+      category: selectedBaiduPptCategory.value || undefined,
+    },
     (chunk) => {
       baiduPptOutline.value += chunk
     },
@@ -767,6 +844,14 @@ async function handleExport(format: string) {
   margin: 0 auto;
 }
 
+.preview-view :deep(.el-row) {
+  align-items: stretch;
+}
+
+.preview-view :deep(.el-col) {
+  display: flex;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -775,19 +860,39 @@ async function handleExport(format: string) {
 
 .editor-card,
 .preview-card {
-  min-height: 600px;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
-.editor-textarea :deep(textarea) {
+.editor-card :deep(.el-card__body),
+.preview-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-textarea {
+  flex: 1;
+  min-height: 0;
+}
+
+.editor-textarea :deep(.el-textarea__inner) {
   font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 14px;
   line-height: 1.6;
+  height: 100% !important;
+  min-height: 100% !important;
+  resize: none;
 }
 
 .markdown-preview {
+  flex: 1;
+  min-height: 0;
   line-height: 1.8;
   font-size: 14px;
-  max-height: 560px;
   overflow-y: auto;
 }
 
@@ -848,6 +953,12 @@ async function handleExport(format: string) {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.baidu-style-hint {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .ppt-progress {

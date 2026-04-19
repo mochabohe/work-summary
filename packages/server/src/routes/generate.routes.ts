@@ -70,7 +70,7 @@ function repairTruncatedJson(json: string): string {
  * 支持有序列表（1. 2. 3.）和无序列表（- *），每条目尝试提取"标题：描述"格式。
  * 超过 5 条时自动拆分为多页。
  */
-function sectionToSlides(title: string, content: string): any[] {
+function sectionToSlides(title: string, content: string, preserveText = false): any[] {
   const items: string[] = []
 
   for (const line of content.split('\n')) {
@@ -84,6 +84,10 @@ function sectionToSlides(title: string, content: string): any[] {
   // 如果没有列表项，把非空行作为 bullets
   const bullets = (items.length > 0 ? items : content.split('\n').filter(l => l.trim()))
     .map(item => {
+      if (preserveText) {
+        return item
+      }
+
       // "主导xxx：描述" → "**主导xxx**：描述"（取第一个中文冒号前不超过 20 字的短语加粗）
       const idx = item.indexOf('：')
       if (idx > 0 && idx <= 20) {
@@ -122,6 +126,10 @@ function parseMarkdownSections(markdown: string): { title: string; content: stri
     }
   }
 
+  if (sections.length === 0 && markdown.trim()) {
+    sections.push({ title: '正文内容', content: markdown.trim() })
+  }
+
   return sections
 }
 
@@ -149,9 +157,9 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
   // AI 分段生成 PPT 幻灯片 (SSE)
   // 策略：将 Markdown 按章节拆分，每个章节独立调用 AI 生成幻灯片，避免单次输出超过 token 上限
   app.post<{
-    Body: { content: string; title?: string }
+    Body: { content: string; title?: string; strict?: boolean }
   }>('/ppt', async (request, reply) => {
-    const { content, title: pptTitle } = request.body
+    const { content, title: pptTitle, strict = false } = request.body
     const coverTitle = pptTitle || '年终工作总结'
 
     reply.hijack()
@@ -179,6 +187,25 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
 
       // --- 1. 封面页（自动生成，无需 AI） ---
       allSlides.push({ type: 'title', title: coverTitle, subtitle: `${new Date().getFullYear()}` })
+
+      if (strict) {
+        for (let i = 0; i < sections.length; i++) {
+          step++
+          const section = sections[i]
+          reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: `[${step}/${sections.length}] 正在按正文转换章节：${section.title}...` })}\n\n`)
+
+          const parsedSlides = sectionToSlides(section.title, section.content, true)
+          allSlides.push({ type: 'section', title: section.title })
+          allSlides.push(...parsedSlides)
+          app.log.info(`strict PPT section "${section.title}" -> ${parsedSlides.length} slides`)
+        }
+
+        allSlides.push({ type: 'end', title: '感谢', subtitle: '谢谢观看' })
+        const slidesData = { title: coverTitle, slides: allSlides }
+        app.log.info(`Strict PPT generation completed with ${allSlides.length} slides`)
+        reply.raw.write(`data: ${JSON.stringify({ type: 'done', slidesData })}\n\n`)
+        return
+      }
 
       // --- 2. 全年概览指标（AI 提取关键数据） ---
       step++

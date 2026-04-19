@@ -66,6 +66,10 @@ export interface PptData {
   slides: PptSlide[]
 }
 
+export interface GenerateSlidesOptions {
+  strict?: boolean
+}
+
 /** AI 分段生成幻灯片结构（SSE 流式），完成后返回 slidesData 供预览 */
 export function generateSlides(
   content: string,
@@ -74,13 +78,14 @@ export function generateSlides(
   onDone: (slidesData: PptData) => void,
   onError: (err: string) => void,
   onProgress?: (message: string) => void,
+  options?: GenerateSlidesOptions,
 ): () => void {
   const controller = new AbortController()
 
   fetch('/api/v1/generate/ppt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, title }),
+    body: JSON.stringify({ content, title, strict: options?.strict }),
     signal: controller.signal,
   })
     .then(async (response) => {
@@ -193,6 +198,12 @@ export interface BaiduPptProgress {
   outline?: string
 }
 
+export interface BaiduPptTheme {
+  style_id: number
+  tpl_id: number
+  style_name_list?: string[]
+}
+
 /** 检查百度 AI PPT 是否可用 */
 export async function checkBaiduPptStatus(): Promise<boolean> {
   try {
@@ -202,6 +213,16 @@ export async function checkBaiduPptStatus(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** 获取百度 AI PPT 可用模板 */
+export async function fetchBaiduPptThemes(): Promise<BaiduPptTheme[]> {
+  const res = await fetch('/api/v1/export/baidu-ppt/themes')
+  const json = await res.json() as any
+  if (!json.success) {
+    throw new Error(json.error || '加载 PPT 风格失败')
+  }
+  return json.data || []
 }
 
 /**

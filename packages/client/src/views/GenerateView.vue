@@ -1,105 +1,6 @@
 <template>
-  <div class="generate-view" :class="{ 'compare-active': compareActive }">
-    <!-- 对比模式：两栏布局 -->
-    <template v-if="compareActive">
-      <div class="compare-header-bar">
-        <div class="compare-title-area">
-          <span class="compare-title">双版本对比</span>
-          <span class="compare-subtitle">同一份数据，两种风格同时生成，可直接编辑后选择</span>
-        </div>
-        <div class="compare-actions">
-          <el-button v-if="anyCompareGenerating" @click="abortAllCompare" type="danger" plain>
-            停止生成
-          </el-button>
-          <el-button @click="exitCompare">返回配置</el-button>
-        </div>
-      </div>
-
-      <el-row :gutter="12">
-        <el-col :span="12" v-for="s in styleOptions" :key="s.key">
-          <el-card class="compare-card">
-            <template #header>
-              <div class="compare-card-header">
-                <div>
-                  <span class="compare-style-name">{{ s.label }}</span>
-                  <div class="compare-style-desc">{{ s.desc }}</div>
-                  <span v-if="compareContents[s.key] && !compareGenerating[s.key]" class="compare-stats">
-                    {{ getCompareStats(s.key).chars }} 字 · {{ getCompareStats(s.key).sections }} 个板块
-                  </span>
-                </div>
-                <div class="compare-card-btns">
-                  <el-button
-                    v-if="compareContents[s.key] && !compareGenerating[s.key]"
-                    size="small"
-                    :type="compareEditMode[s.key] ? 'info' : ''"
-                    @click="compareEditMode[s.key] = !compareEditMode[s.key]"
-                  >
-                    {{ compareEditMode[s.key] ? '预览' : '编辑' }}
-                  </el-button>
-                  <el-button
-                    v-if="compareContents[s.key] && !compareGenerating[s.key]"
-                    size="small"
-                    @click="copyCompareContent(s.key)"
-                  >
-                    复制
-                  </el-button>
-                  <el-button
-                    v-if="compareContents[s.key] && !compareGenerating[s.key]"
-                    type="primary"
-                    size="small"
-                    @click="selectVersion(s.key)"
-                  >
-                    选择此版本
-                  </el-button>
-                </div>
-              </div>
-            </template>
-
-            <div class="compare-card-body">
-              <template v-if="compareGenerating[s.key]">
-                <div
-                  v-if="compareContents[s.key]"
-                  class="markdown-preview"
-                  v-html="renderMarkdown(compareContents[s.key])"
-                ></div>
-                <div class="compare-loading-tip">
-                  <span class="loading-dots">
-                    <span></span><span></span><span></span>
-                  </span>
-                  <span v-if="compareProgress[s.key]">{{ compareProgress[s.key] }}</span>
-                  <span v-else>正在连接...</span>
-                </div>
-              </template>
-
-              <template v-else-if="compareContents[s.key]">
-                <!-- 编辑模式 -->
-                <div v-if="compareEditMode[s.key]" class="compare-edit-area">
-                  <div class="compare-edit-tip">直接修改 Markdown 内容，点击"选择此版本"应用</div>
-                  <textarea
-                    class="compare-textarea"
-                    v-model="compareContents[s.key]"
-                  ></textarea>
-                </div>
-                <!-- 预览模式 -->
-                <div
-                  v-else
-                  class="markdown-preview"
-                  v-html="renderMarkdown(compareContents[s.key])"
-                ></div>
-              </template>
-
-              <div v-else class="compare-empty">
-                <el-empty description="等待生成" :image-size="60" />
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
-    </template>
-
-    <!-- 普通模式：原有布局 -->
-    <template v-else>
-      <el-row :gutter="20">
+  <div class="generate-view">
+    <el-row :gutter="20">
         <!-- 左侧: 配置面板 -->
         <el-col :span="10">
           <el-card>
@@ -302,14 +203,6 @@
                 >
                   先生成大纲
                 </el-button>
-                <el-button
-                  size="large"
-                  @click="generateCompare"
-                  :disabled="!canGenerate || summaryStore.generating || outlineGenerating"
-                  class="generate-btn"
-                >
-                  对比生成 (2种风格)
-                </el-button>
               </div>
             </template>
           </el-card>
@@ -350,9 +243,6 @@
 
             <div class="outline-actions">
               <el-button @click="outline = []">放弃大纲</el-button>
-              <el-button @click="compareFromOutline" :disabled="summaryStore.generating">
-                对比生成 (2种风格)
-              </el-button>
               <el-button type="primary" @click="generateFromOutline" :loading="summaryStore.generating">
                 基于大纲生成全文
               </el-button>
@@ -521,8 +411,6 @@
           </el-button>
         </div>
       </div>
-    </template>
-
     <!-- 历史记录抽屉 -->
     <el-drawer v-model="historyDrawerVisible" title="生成历史" direction="rtl" size="360px">
       <div class="history-list">
@@ -774,31 +662,6 @@ watch([() => summaryStore.chatMessages, refining], () => {
   })
 }, { deep: true })
 
-// ===== 对比模式状态 =====
-const compareActive = ref(false)
-const compareContents = reactive<Record<string, string>>({
-  'formal': '',
-  'semi-formal': '',
-})
-const compareGenerating = reactive<Record<string, boolean>>({
-  'formal': false,
-  'semi-formal': false,
-})
-const compareProgress = reactive<Record<string, string>>({
-  'formal': '',
-  'semi-formal': '',
-})
-const compareEditMode = reactive<Record<string, boolean>>({
-  'formal': false,
-  'semi-formal': false,
-})
-const compareAborts: (() => void)[] = []
-
-const styleOptions = [
-  { key: 'formal', label: '业务导向', desc: '突出业务价值，适合向上汇报' },
-  { key: 'semi-formal', label: '技术叙述', desc: '兼顾业务和技术，适合团队内' },
-]
-
 const docTypeOptions = [
   { value: 'yearly-summary', label: '年终总结', icon: '🏆', desc: '年度价值沉淀' },
   { value: 'quarterly-review', label: '季度复盘', icon: '📊', desc: '目标达成与改进' },
@@ -837,10 +700,6 @@ const formatOptions = [
   { value: 'star', label: 'STAR 法则' },
 ] as const
 
-const anyCompareGenerating = computed(() => {
-  return compareGenerating['formal'] || compareGenerating['semi-formal']
-})
-
 // ===== 版本历史 Diff 状态 =====
 const diffDialogVisible = ref(false)
 const diffData = ref<{
@@ -876,21 +735,8 @@ const languageLabel = computed(() => findOptionLabel(languageOptions, summarySto
 const formatLabel = computed(() => findOptionLabel(formatOptions, summaryStore.format))
 const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.value} / ${languageLabel.value}`)
 
-function getMonthRangeEnd(value: string): string {
-  const [year, month] = value.split('-').map(Number)
-  const lastDay = new Date(year, month, 0).getDate()
-  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-}
-
-const generalPeriod = computed(() => ({
-  type: 'custom' as const,
-  start: `${settingsStore.startDate}-01`,
-  end: getMonthRangeEnd(settingsStore.endDate),
-  label: `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
-}))
-
 const generalWorkItems = computed(() => (
-  workspaceStore.filterByPeriod(generalPeriod.value)
+  workspaceStore.workItems
 ))
 
 const canGenerate = computed(() => {
@@ -921,14 +767,6 @@ function addCustomDimension() {
   }
   summaryStore.dimensions.push(dim)
   customDim.value = ''
-}
-
-const renderedContent = computed(() => {
-  return md.render(summaryStore.content || '')
-})
-
-function renderMarkdown(content: string): string {
-  return md.render(content || '')
 }
 
 /** 清理 AI 开场白废话 */
@@ -987,7 +825,7 @@ function generate() {
           docType,
           gitAuthor: appStore.isGeneral ? '' : (settingsStore.gitAuthor || ''),
           dateRange: appStore.isGeneral
-            ? `${generalPeriod.value.start} ~ ${generalPeriod.value.end}`
+            ? '全部工作项'
             : `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
           projects,
         },
@@ -1004,144 +842,12 @@ function generate() {
   )
 }
 
-// ===== 对比生成（两种风格并行） =====
-function generateCompare() {
-  compareActive.value = true
-  for (const s of styleOptions) {
-    compareContents[s.key] = ''
-    compareGenerating[s.key] = true
-    compareProgress[s.key] = ''
-    compareEditMode[s.key] = false
-  }
-  compareAborts.length = 0
-
-  for (const s of styleOptions) {
-    const abort = streamGenerate(
-      {
-        ...buildGenerateRequest(),
-        style: s.key as 'formal' | 'semi-formal',
-      },
-      (chunk) => {
-        compareContents[s.key] += chunk
-      },
-      () => {
-        compareContents[s.key] = cleanAIOutput(compareContents[s.key])
-        compareGenerating[s.key] = false
-
-        if (!compareGenerating['formal'] && !compareGenerating['semi-formal']) {
-          ElMessage.success('两个版本全部生成完成，请选择满意的版本')
-        }
-      },
-      (err) => {
-        compareGenerating[s.key] = false
-        ElMessage.error(`「${s.label}」生成失败: ${err}`)
-      },
-      (progress) => {
-        compareProgress[s.key] = progress
-      },
-    )
-    compareAborts.push(abort)
-  }
-}
-
-/** 基于大纲对比生成两种风格 */
-function compareFromOutline() {
-  const validOutline = outline.value
-    .filter(item => item.title.trim())
-    .map(item => ({ ...item, points: item.points.filter(p => p.trim()) }))
-
-  if (validOutline.length === 0) {
-    ElMessage.warning('大纲为空，请至少添加一个章节')
-    return
-  }
-
-  compareActive.value = true
-  for (const s of styleOptions) {
-    compareContents[s.key] = ''
-    compareGenerating[s.key] = true
-    compareProgress[s.key] = ''
-    compareEditMode[s.key] = false
-  }
-  compareAborts.length = 0
-
-  for (const s of styleOptions) {
-    const abort = streamFromOutline(
-      {
-        ...buildGenerateRequest(),
-        style: s.key as 'formal' | 'semi-formal',
-        outline: validOutline,
-      },
-      (chunk) => {
-        compareContents[s.key] += chunk
-      },
-      () => {
-        compareContents[s.key] = cleanAIOutput(compareContents[s.key])
-        compareGenerating[s.key] = false
-
-        if (!compareGenerating['formal'] && !compareGenerating['semi-formal']) {
-          outline.value = []
-          ElMessage.success('两个版本全部生成完成，请选择满意的版本')
-        }
-      },
-      (err) => {
-        compareGenerating[s.key] = false
-        ElMessage.error(`「${s.label}」生成失败: ${err}`)
-      },
-      (progress) => {
-        compareProgress[s.key] = progress
-      },
-    )
-    compareAborts.push(abort)
-  }
-}
-
-function selectVersion(styleKey: string) {
-  summaryStore.setContent(compareContents[styleKey])
-  summaryStore.style = styleKey as 'formal' | 'semi-formal'
-  summaryStore.clearVersions()
-  summaryStore.saveVersion('初始生成')
-  compareActive.value = false
-  summaryStore.chatMessages = []
-  configCollapsed.value = true
-  const label = styleOptions.find(s => s.key === styleKey)?.label || styleKey
-  ElMessage.success(`已选择「${label}」版本，可继续使用对话修改`)
-}
-
-function abortAllCompare() {
-  for (const abort of compareAborts) {
-    abort()
-  }
-  compareAborts.length = 0
-  for (const s of styleOptions) {
-    compareGenerating[s.key] = false
-  }
-}
-
-function exitCompare() {
-  abortAllCompare()
-  compareActive.value = false
-}
-
-function getCompareStats(styleKey: string) {
-  const text = compareContents[styleKey]
-  if (!text) return { chars: 0, sections: 0 }
-  const plain = text.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').replace(/[*_~`>-]/g, '').trim()
-  const chars = plain.replace(/\s+/g, '').length
-  const sections = text.split('\n').filter(l => /^##\s/.test(l.trim())).length
-  return { chars, sections }
-}
-
 function stripMarkdown(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/^[-*]\s+/gm, '- ')
-}
-
-function copyCompareContent(styleKey: string) {
-  navigator.clipboard.writeText(stripMarkdown(compareContents[styleKey]))
-  ElMessage.success('已复制到剪贴板')
 }
 
 // ===== 对话式修改 =====
@@ -1294,15 +1000,19 @@ function submitCustomRefine() {
 
 // ===== 大纲模式 =====
 function buildGenerateRequest() {
-  const analyses = projectStore.getSelectedAnalyses()
-  const workItems = appStore.isGeneral ? generalWorkItems.value : undefined
+  const isGeneralMode = appStore.isGeneral
+  const analyses = isGeneralMode ? undefined : projectStore.getSelectedAnalyses()
+  const workItems = isGeneralMode ? generalWorkItems.value : undefined
+  const standaloneDocuments = isGeneralMode
+    ? undefined
+    : (projectStore.scanResult?.standaloneDocuments || [])
   return {
     projects: analyses,
     workItems,
-    period: appStore.isGeneral ? generalPeriod.value : undefined,
+    period: undefined,
     mode: appStore.mode ?? 'developer',
     feishuDocs: summaryStore.feishuDocs,
-    standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
+    standaloneDocuments,
     dimensions: summaryStore.dimensions,
     style: summaryStore.style,
     docType: summaryStore.docType,
@@ -1402,100 +1112,6 @@ function moveOutline(index: number, direction: number) {
   margin: 0 auto;
 }
 
-.generate-view.compare-active {
-  max-width: 1600px;
-}
-
-/* ===== 对比模式样式 ===== */
-.compare-header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-}
-
-.compare-title-area {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.compare-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.compare-subtitle {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.compare-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.compare-card {
-  height: calc(100vh - 160px);
-  display: flex;
-  flex-direction: column;
-}
-
-.compare-card :deep(.el-card__body) {
-  flex: 1;
-  overflow: hidden;
-  padding: 12px;
-}
-
-.compare-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.compare-style-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.compare-style-desc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-  margin-top: 2px;
-}
-
-.compare-stats {
-  display: inline-block;
-  font-size: 12px;
-  color: #409eff;
-  margin-top: 4px;
-}
-
-.compare-card-btns {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.compare-card-body {
-  height: 100%;
-  overflow-y: auto;
-}
-
-.compare-loading-tip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
 .loading-dots {
   display: inline-flex;
   gap: 3px;
@@ -1520,45 +1136,6 @@ function moveOutline(index: number, direction: number) {
 @keyframes dotPulse {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }
-}
-
-.compare-edit-area {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.compare-edit-tip {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-  padding: 4px 0 8px;
-  flex-shrink: 0;
-}
-
-.compare-textarea {
-  flex: 1;
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  padding: 10px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
-  outline: none;
-  color: #e2e8f0;
-  box-sizing: border-box;
-}
-
-.compare-textarea:focus {
-  border-color: #409eff;
-}
-
-.compare-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
 }
 
 /* ===== 普通模式样式 ===== */
@@ -2295,3 +1872,4 @@ function moveOutline(index: number, direction: number) {
   margin: 0;
 }
 </style>
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 百度 AI PPT 导出服务
  *
  * 调用百度千帆 AI PPT API，基于专业设计模板生成高质量 PPT。
@@ -44,8 +44,16 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
  * 从 Markdown 工作总结直接构建百度 PPT 大纲
  *
  * 忠实解析用户的章节标题和条目，不经过 AI 生成，
- * 每个条目保留冒号前的关键标题（不超过 30 字）以适配幻灯片版式。
+ * 每个条目尽量保留完整语义，避免百度侧根据短标题二次发挥。
  */
+function normalizeOutlineItem(text: string): string {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+}
+
 function buildOutlineFromMarkdown(markdown: string): { title: string; query: string; outline: string } {
   const lines = markdown.split('\n')
   let mainTitle = '工作总结'
@@ -67,19 +75,12 @@ function buildOutlineFromMarkdown(markdown: string): { title: string; query: str
     }
     const numbered = trimmed.match(/^\d+\.\s+(.+)/)
     if (numbered && currentSection) {
-      const item = numbered[1].replace(/\*\*/g, '').trim()
-      // 冒号前为关键标题，截取合理长度
-      const colonIdx = item.indexOf('：')
-      const shortItem = colonIdx > 0 && colonIdx <= 25 ? item.slice(0, colonIdx) : item.slice(0, 40)
-      currentSection.items.push(shortItem)
+      currentSection.items.push(normalizeOutlineItem(numbered[1]))
       continue
     }
     const bullet = trimmed.match(/^[-*]\s+(.+)/)
     if (bullet && currentSection) {
-      const item = bullet[1].replace(/\*\*/g, '').trim()
-      const colonIdx = item.indexOf('：')
-      const shortItem = colonIdx > 0 && colonIdx <= 25 ? item.slice(0, colonIdx) : item.slice(0, 40)
-      currentSection.items.push(shortItem)
+      currentSection.items.push(normalizeOutlineItem(bullet[1]))
     }
   }
 
