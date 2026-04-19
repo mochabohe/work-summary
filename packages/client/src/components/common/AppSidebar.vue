@@ -19,7 +19,6 @@
         <span>配置设置</span>
       </el-menu-item>
 
-      <!-- 研发模式专属：Git 扫描流程 -->
       <template v-if="!appStore.isGeneral">
         <el-menu-item index="/scan">
           <el-icon><FolderOpened /></el-icon>
@@ -31,7 +30,6 @@
         </el-menu-item>
       </template>
 
-      <!-- 通用模式专属：工作空间 -->
       <el-menu-item v-if="appStore.isGeneral" index="/workspace">
         <el-icon><Notebook /></el-icon>
         <span>工作空间</span>
@@ -52,30 +50,67 @@
     </el-menu>
 
     <div class="sidebar-footer">
+      <template v-if="modelStore.hasQuickSwitch">
+        <div class="model-switcher">
+          <div class="model-switcher-label">AI 模型</div>
+          <div class="model-switcher-row">
+            <el-select
+              v-model="selectedModel"
+              class="footer-model-select"
+              size="small"
+              popper-class="model-option-popper footer-model-popper"
+              :loading="switchingModel"
+              @change="handleQuickSwitch"
+            >
+              <el-option
+                v-for="item in modelStore.availableModels"
+                :key="item.id"
+                :label="item.id"
+                :value="item.id"
+              >
+                <div class="footer-model-option">
+                  <span class="footer-model-option-name">{{ item.id }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </div>
+          <el-button
+            class="model-config-btn"
+            @click="openModelConfig"
+          >
+            <el-icon><Operation /></el-icon>
+            <span>模型配置</span>
+          </el-button>
+        </div>
+      </template>
+
       <el-button
+        v-else
         class="model-btn"
-        @click="modelDialogVisible = true"
+        @click="openModelConfig"
       >
         <el-icon><Cpu /></el-icon>
         <span>AI 模型</span>
       </el-button>
+
       <span class="version-tag">v1.0.0</span>
     </div>
 
     <el-dialog
       v-model="modelDialogVisible"
-      title="切换 AI 模型（不配置则用默认 DeepSeek）"
+      title="模型配置"
       width="720px"
       align-center
     >
-      <ModelConfigPanel />
+      <ModelConfigPanel @saved="handleConfigSaved" />
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import {
   House,
   Setting,
@@ -86,13 +121,82 @@ import {
   Document,
   Notebook,
   Cpu,
+  Operation,
 } from '@element-plus/icons-vue'
 import { useAppStore } from '@/stores/app'
+import { useModelStore } from '@/stores/model'
+import api from '@/api/index'
 import ModelConfigPanel from './ModelConfigPanel.vue'
 
 const route = useRoute()
 const appStore = useAppStore()
+const modelStore = useModelStore()
+
 const modelDialogVisible = ref(false)
+const selectedModel = ref('')
+const switchingModel = ref(false)
+
+function detectRecommendedApiType(model: string): 'chat' | 'responses' {
+  const normalized = model.toLowerCase()
+  if (
+    normalized.startsWith('o1')
+    || normalized.startsWith('o3')
+    || normalized.startsWith('gpt-5')
+    || normalized.startsWith('gpt5')
+    || normalized.includes('reasoner')
+    || normalized.includes('reasoning')
+  ) {
+    return 'responses'
+  }
+  return 'chat'
+}
+
+function openModelConfig() {
+  modelDialogVisible.value = true
+}
+
+async function handleConfigSaved() {
+  modelDialogVisible.value = false
+  await modelStore.refreshCurrentConfig()
+}
+
+async function handleQuickSwitch(model: string) {
+  const previous = modelStore.currentModel
+  if (!model || model === previous) return
+
+  switchingModel.value = true
+  try {
+    const nextApiType = modelStore.current.provider === 'openai-compatible'
+      ? detectRecommendedApiType(model)
+      : undefined
+
+    await api.post('/config/model/select', {
+      model,
+      apiType: nextApiType,
+    })
+
+    await modelStore.refreshCurrentConfig()
+    selectedModel.value = modelStore.currentModel
+    ElMessage.success(`已切换到 ${model}`)
+  } catch (err: any) {
+    selectedModel.value = previous
+    ElMessage.error(err.message || '模型切换失败')
+  } finally {
+    switchingModel.value = false
+  }
+}
+
+watch(
+  () => modelStore.currentModel,
+  (value) => {
+    selectedModel.value = value
+  },
+  { immediate: true },
+)
+
+onMounted(async () => {
+  await modelStore.refreshCurrentConfig()
+})
 </script>
 
 <style scoped>
@@ -108,7 +212,6 @@ const modelDialogVisible = ref(false)
   box-shadow: 4px 0 30px rgba(0, 0, 0, 0.4);
 }
 
-/* 侧栏顶部微光效果 */
 .sidebar::before {
   content: '';
   position: absolute;
@@ -120,7 +223,6 @@ const modelDialogVisible = ref(false)
   pointer-events: none;
 }
 
-/* Logo 区域 */
 .sidebar-logo {
   padding: 24px 20px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -146,7 +248,6 @@ const modelDialogVisible = ref(false)
   letter-spacing: 1px;
 }
 
-/* 菜单覆盖 */
 .sidebar-menu {
   flex: 1;
   border-right: none;
@@ -155,7 +256,6 @@ const modelDialogVisible = ref(false)
   overflow-y: auto;
 }
 
-/* Element Plus menu 深色覆盖 */
 .sidebar-menu :deep(.el-menu) {
   background: transparent;
   border: none;
@@ -183,14 +283,12 @@ const modelDialogVisible = ref(false)
   filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.5));
 }
 
-/* 激活状态 */
 .sidebar-menu :deep(.el-menu-item.is-active) {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.15) 100%);
   color: #fff;
   font-weight: 500;
 }
 
-/* 左侧亮色指示条 */
 .sidebar-menu :deep(.el-menu-item.is-active::before) {
   content: '';
   position: absolute;
@@ -215,7 +313,6 @@ const modelDialogVisible = ref(false)
   font-size: 18px;
 }
 
-/* Footer */
 .sidebar-footer {
   padding: 12px 14px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -223,6 +320,23 @@ const modelDialogVisible = ref(false)
   flex-direction: column;
   gap: 8px;
   align-items: stretch;
+}
+
+.model-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-switcher-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.8px;
+  padding-left: 2px;
+}
+
+.model-switcher-row {
+  display: block;
 }
 
 .model-btn {
@@ -248,6 +362,94 @@ const modelDialogVisible = ref(false)
 .model-btn :deep(.el-icon) {
   color: #a78bfa;
   font-size: 14px;
+}
+
+.footer-model-select {
+  width: 100%;
+}
+
+.footer-model-select :deep(.el-select__wrapper) {
+  min-height: 42px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)) !important;
+  border: 1px solid rgba(167, 139, 250, 0.22) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(7, 5, 18, 0.18);
+  padding-left: 16px;
+  padding-right: 14px;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.footer-model-select :deep(.el-select__selection) {
+  min-width: 0;
+}
+
+.footer-model-select :deep(.el-select__wrapper:hover),
+.footer-model-select :deep(.el-select__wrapper.is-focused) {
+  border-color: rgba(167, 139, 250, 0.42) !important;
+  background: linear-gradient(180deg, rgba(102, 126, 234, 0.18), rgba(167, 139, 250, 0.08)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(11, 8, 26, 0.28);
+}
+
+.footer-model-select :deep(.el-select__selected-item) {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-model-select :deep(.el-select__caret) {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.model-config-btn {
+  width: 100%;
+  height: 36px;
+  margin-top: 8px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)) !important;
+  border: 1px solid rgba(167, 139, 250, 0.22) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  justify-content: center;
+  gap: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(7, 5, 18, 0.18);
+}
+
+.model-config-btn:hover {
+  background: linear-gradient(180deg, rgba(102, 126, 234, 0.2), rgba(167, 139, 250, 0.1)) !important;
+  border-color: rgba(167, 139, 250, 0.42) !important;
+  color: #fff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(11, 8, 26, 0.28);
+}
+
+.footer-model-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.footer-model-option-name {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
 }
 
 .version-tag {

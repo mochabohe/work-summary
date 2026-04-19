@@ -16,6 +16,14 @@
                   {{ configCollapsed ? '展开配置' : '收起配置' }}
                 </el-button>
               </div>
+              <div class="generate-model-hint">
+                <span class="generate-model-label">当前生成模型</span>
+                <span class="generate-model-value">{{ currentGenerationModel }}</span>
+                <span class="generate-model-meta">模型厂商：{{ currentGenerationModelVendor }}</span>
+                <span class="generate-model-source">请求网关：{{ currentGenerationModelSource }}</span>
+                <span class="generate-model-meta">妯″瀷鍘傚晢锛�{{ currentGenerationModelVendor }}</span>
+                <span class="generate-model-source">来源：{{ currentGenerationModelSource }}</span>
+              </div>
             </template>
 
             <!-- 折叠状态 -->
@@ -555,7 +563,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, nextTick, watch } from 'vue'
+import { ref, computed, reactive, nextTick, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
@@ -566,11 +574,13 @@ import { useSummaryStore } from '@/stores/summary'
 import { useSettingsStore } from '@/stores/settings'
 import { useAppStore } from '@/stores/app'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useModelStore } from '@/stores/model'
 import { streamGenerate, streamRefine, streamRefineSection, streamGenerateOutline, streamFromOutline } from '@/api/generate'
 import { listHistory, saveHistory, getHistory, deleteHistory, type HistoryEntry } from '@/api/history'
 
 const router = useRouter()
 const appStore = useAppStore()
+const modelStore = useModelStore()
 const projectStore = useProjectStore()
 const summaryStore = useSummaryStore()
 const settingsStore = useSettingsStore()
@@ -735,6 +745,44 @@ const languageLabel = computed(() => findOptionLabel(languageOptions, summarySto
 const formatLabel = computed(() => findOptionLabel(formatOptions, summaryStore.format))
 const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.value} / ${languageLabel.value}`)
 
+const currentGenerationModel = computed(() => {
+  if (!modelStore.current.configured || !modelStore.current.model) {
+    return 'DeepSeek 默认模型'
+  }
+  return modelStore.current.model
+})
+
+const currentGenerationModelVendor = computed(() => {
+  if (!modelStore.current.configured || !modelStore.current.model) {
+    return 'DeepSeek'
+  }
+
+  const model = modelStore.current.model.toLowerCase()
+  if (model.includes('claude')) return 'Anthropic'
+  if (model.includes('deepseek')) return 'DeepSeek'
+  if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) return 'OpenAI'
+  if (model.includes('gemini')) return 'Google'
+  if (model.includes('qwen')) return 'Qwen'
+  if (model.includes('glm')) return 'Zhipu AI'
+  return 'Current Model'
+})
+
+const currentGenerationModelSource = computed(() => {
+  if (!modelStore.current.configured || !modelStore.current.model) {
+    return '后端预置'
+  }
+
+  if (modelStore.current.provider === 'openai-compatible') {
+    return modelStore.current.baseURL || '自定义 OpenAI 兼容代理'
+  }
+
+  if (modelStore.current.provider === 'anthropic') {
+    return modelStore.current.baseURL || 'Anthropic'
+  }
+
+  return '当前生效配置'
+})
+
 const generalWorkItems = computed(() => (
   workspaceStore.workItems
 ))
@@ -746,6 +794,12 @@ const canGenerate = computed(() => {
   return projectStore.analyses.size > 0
     || (projectStore.scanResult?.standaloneDocuments?.length ?? 0) > 0
     || summaryStore.feishuDocs.length > 0
+})
+
+onMounted(async () => {
+  if (!modelStore.initialized) {
+    await modelStore.refreshCurrentConfig()
+  }
 })
 
 function addDimension(dim: string) {
@@ -1280,6 +1334,42 @@ function moveOutline(index: number, direction: number) {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+.generate-model-hint {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.generate-model-hint > :nth-child(5),
+.generate-model-hint > :nth-child(6) {
+  display: none;
+}
+
+.generate-model-label {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.generate-model-value {
+  color: #f8fafc;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.16);
+  border: 1px solid rgba(167, 139, 250, 0.24);
+}
+
+.generate-model-source {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.generate-model-meta {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .generate-btn {

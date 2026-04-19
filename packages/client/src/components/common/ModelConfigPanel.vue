@@ -67,6 +67,7 @@
             :loading="loadingModels"
             :disabled="!canLoadModels"
             @click="loadModels"
+            popper-class="model-option-popper"
           >
             <el-icon><RefreshRight /></el-icon>
             {{ loadedModels.length > 0 ? '重新拉取' : '拉取' }}
@@ -84,8 +85,10 @@
             v-model="modelId"
             size="small"
             style="width: 240px;"
+            class="model-select"
             filterable
             placeholder="从下拉选择"
+            popper-class="model-option-popper"
           >
             <el-option
               v-for="m in loadedModels"
@@ -93,8 +96,13 @@
               :value="m.id"
               :label="m.id"
             >
-              <span>{{ m.id }}</span>
-              <span v-if="m.ownedBy" class="owned-by">{{ m.ownedBy }}</span>
+              <div class="model-option-row">
+                <div class="model-option-main">
+                  <span class="model-option-name">{{ m.id }}</span>
+                  <span v-if="m.ownedBy" class="model-option-meta">{{ m.ownedBy }}</span>
+                </div>
+                <el-icon v-if="modelId === m.id" class="model-option-check"><Check /></el-icon>
+              </div>
             </el-option>
           </el-select>
           <el-select
@@ -102,8 +110,17 @@
             v-model="modelId"
             size="small"
             style="width: 240px;"
+            class="model-select"
+            popper-class="model-option-popper"
           >
-            <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m" />
+            <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m">
+              <div class="model-option-row">
+                <div class="model-option-main">
+                  <span class="model-option-name">{{ m }}</span>
+                </div>
+                <el-icon v-if="modelId === m" class="model-option-check"><Check /></el-icon>
+              </div>
+            </el-option>
           </el-select>
           <el-input
             v-else
@@ -140,7 +157,7 @@
             size="small"
             type="primary"
             :loading="modelSaving"
-            :disabled="!modelApiKey || !modelId"
+            :disabled="!modelApiKey || !modelId || modelTestResult !== 'ok'"
             @click="saveModel"
           >保存</el-button>
         </div>
@@ -181,9 +198,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { RefreshRight, InfoFilled } from '@element-plus/icons-vue'
+import { RefreshRight, InfoFilled, Check } from '@element-plus/icons-vue'
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
+import { useModelStore } from '@/stores/model'
+
+const emit = defineEmits<{
+  saved: []
+}>()
 
 const modelProvider = ref<'openai' | 'custom' | 'anthropic'>('openai')
 const modelId = ref('gpt-4o-mini')
@@ -198,6 +220,7 @@ const modelUsed = ref('')
 const requestedModel = ref('')
 const loadingModels = ref(false)
 const loadedModels = ref<{ id: string; ownedBy: string }[]>([])
+const modelStore = useModelStore()
 
 const modelPresets: Record<string, string[]> = {
   openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
@@ -293,6 +316,7 @@ async function loadModels() {
     }) as unknown as ApiResponse<{ models: { id: string; ownedBy: string }[]; total: number }>
     if (res.success && res.data) {
       loadedModels.value = res.data.models
+      modelStore.setAvailableModels(res.data.models)
       ElMessage.success(`✓ 拉取到 ${res.data.total} 个模型`)
       // 如果当前模型 ID 不在列表里，自动选第一个
       if (!loadedModels.value.find(m => m.id === modelId.value)) {
@@ -346,6 +370,10 @@ async function testModel() {
 
 async function saveModel() {
   if (!modelApiKey.value) { ElMessage.warning('请先填写 API Key'); return }
+  if (modelTestResult.value !== 'ok') {
+    ElMessage.warning('请先测试连接并确保测试通过后再保存')
+    return
+  }
   const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
   const baseURL = (modelProvider.value === 'custom' || (modelProvider.value === 'anthropic' && modelBaseURL.value))
     ? modelBaseURL.value
@@ -353,14 +381,19 @@ async function saveModel() {
   modelSaving.value = true
   try {
     // 已测试通过的情况下跳过重复验证（保存秒响应，省一次推理费用）
-    const skipValidate = modelTestResult.value === 'ok'
+    const skipValidate = true
     await api.post('/config/model', {
       provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
       apiType: provider === 'openai-compatible' ? apiType.value : undefined,
+      availableModels: loadedModels.value.length > 0
+        ? loadedModels.value
+        : [{ id: modelId.value, ownedBy: provider }],
       skipValidate,
     })
     ElMessage.success(skipValidate ? '✓ 模型配置已保存' : '✓ 模型配置已保存（已验证）')
+    await modelStore.refreshCurrentConfig()
     modelTestResult.value = 'ok'
+    emit('saved')
   } catch (e: any) {
     ElMessage.error(e.message || '保存失败')
   } finally {
@@ -463,11 +496,64 @@ async function saveModel() {
   line-height: 1.6;
 }
 
-.owned-by {
-  float: right;
+.model-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.model-option-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-option-name {
+  font-size: 14px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.model-option-meta {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.model-option-check {
+  flex-shrink: 0;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.model-select :deep(.el-select__wrapper) {
+  min-height: 40px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.2s ease;
+}
+
+.model-select :deep(.el-select__wrapper:hover) {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.model-select :deep(.el-select__wrapper.is-focused) {
+  border-color: rgba(167, 139, 250, 0.62) !important;
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.12);
+}
+
+.model-select :deep(.el-select__selected-item) {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 500;
+}
+
+.model-select :deep(.el-select__caret) {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .loaded-tip {

@@ -30,6 +30,7 @@ export class OpenAIResponsesClient {
     const body: any = {
       model: this.model,
       input: messages,
+      text: { format: { type: 'text' } },
       // reasoning 模型 token 预算：默认给足 2048，避免推理消耗完后 output 为空
       max_output_tokens: opts?.maxTokens ?? 2048,
     }
@@ -70,6 +71,7 @@ export class OpenAIResponsesClient {
     const body: any = {
       model: this.model,
       input: messages,
+      text: { format: { type: 'text' } },
       stream: true,
       max_output_tokens: maxTokens ?? 4096,
     }
@@ -136,6 +138,8 @@ export class OpenAIResponsesClient {
 
     // 优先 2：text 顶层字段（少数代理把内容直接放外层，但注意 text 也可能是 {format:...} 对象）
     if (typeof json.text === 'string' && json.text.trim()) return json.text
+    if (typeof json.text?.value === 'string' && json.text.value.trim()) return json.text.value
+    if (typeof json.output_text?.value === 'string' && json.output_text.value.trim()) return json.output_text.value
 
     // 标准结构：output 数组 → 遍历所有 type=message 的 item
     const output = json.output
@@ -145,11 +149,17 @@ export class OpenAIResponsesClient {
         if (item?.type === 'message' && Array.isArray(item.content)) {
           for (const c of item.content) {
             if (typeof c?.text === 'string') parts.push(c.text)
+            else if (typeof c?.text?.value === 'string') parts.push(c.text.value)
             else if (typeof c?.content === 'string') parts.push(c.content)
+            else if (typeof c?.content?.text === 'string') parts.push(c.content.text)
+            else if (typeof c?.content?.value === 'string') parts.push(c.content.value)
           }
         }
         else if (item?.type === 'text' && typeof item.text === 'string') {
           parts.push(item.text)
+        }
+        else if (item?.type === 'text' && typeof item?.text?.value === 'string') {
+          parts.push(item.text.value)
         }
         else if (item?.type === 'reasoning' && Array.isArray(item.summary)) {
           for (const s of item.summary) {
@@ -157,7 +167,23 @@ export class OpenAIResponsesClient {
           }
         }
         else if (typeof item?.text === 'string') parts.push(item.text)
+        else if (typeof item?.text?.value === 'string') parts.push(item.text.value)
         else if (typeof item?.content === 'string') parts.push(item.content)
+        else if (typeof item?.content?.text === 'string') parts.push(item.content.text)
+        else if (typeof item?.content?.value === 'string') parts.push(item.content.value)
+      }
+    }
+
+    if (parts.length === 0 && Array.isArray(json.choices)) {
+      for (const choice of json.choices) {
+        const content = choice?.message?.content
+        if (typeof content === 'string' && content.trim()) parts.push(content)
+        if (Array.isArray(content)) {
+          for (const part of content) {
+            if (typeof part?.text === 'string') parts.push(part.text)
+            else if (typeof part?.text?.value === 'string') parts.push(part.text.value)
+          }
+        }
       }
     }
 
@@ -173,7 +199,42 @@ export class OpenAIResponsesClient {
       }
     }
 
+    if (parts.length === 0) {
+      parts.push(...this.collectTextStrings(json.output ?? json))
+    }
+
     return parts.join('').trim()
+  }
+
+  private collectTextStrings(value: unknown, seen = new WeakSet<object>()): string[] {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      return trimmed ? [trimmed] : []
+    }
+
+    if (!value || typeof value !== 'object') {
+      return []
+    }
+
+    if (seen.has(value as object)) {
+      return []
+    }
+    seen.add(value as object)
+
+    if (Array.isArray(value)) {
+      return value.flatMap(item => this.collectTextStrings(item, seen))
+    }
+
+    const obj = value as Record<string, unknown>
+    const results: string[] = []
+
+    for (const key of ['text', 'output_text', 'content', 'value', 'message', 'response', 'output', 'result', 'data']) {
+      if (key in obj) {
+        results.push(...this.collectTextStrings(obj[key], seen))
+      }
+    }
+
+    return results
   }
 
   /** 智能 join：避免重复 / 缺失 */

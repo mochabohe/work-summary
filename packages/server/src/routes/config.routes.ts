@@ -1,21 +1,32 @@
 import { FastifyPluginAsync } from 'fastify'
 import OpenAI from 'openai'
-import { LLMService, setLLMConfig, getLLMConfig } from '../services/llm/index.js'
+import {
+  LLMService,
+  getLLMConfig,
+  setLLMConfig,
+  saveModelProfile,
+  getProfileModelOptions,
+  canQuickSwitchModels,
+  switchToSavedModel,
+} from '../services/llm/index.js'
 import type { ApiResponse, ModelConfig } from '@work-summary/shared'
 
+type SavedModelOption = { id: string; ownedBy?: string }
+
 export const configRoutes: FastifyPluginAsync = async (app) => {
-  // 验证代理是否可用
   app.post('/validate-llm', async (_request, reply) => {
     try {
       const llm = new LLMService()
       const valid = await llm.validate()
-      return reply.send({ success: true, data: { valid, models: valid ? ['deepseek-chat', 'deepseek-reasoner'] : [] } })
+      return reply.send({
+        success: true,
+        data: { valid, models: valid ? ['deepseek-chat', 'deepseek-reasoner'] : [] },
+      })
     } catch {
       return reply.send({ success: true, data: { valid: false, models: [] } })
     }
   })
 
-  // 拉取代理支持的模型列表（OpenAI 标准 /v1/models 接口）
   app.post<{
     Body: { baseURL: string; apiKey: string }
   }>('/list-models', async (request, reply) => {
@@ -23,39 +34,58 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
     if (!baseURL || !apiKey) {
       return reply.status(400).send({ success: false, error: '缺少 baseURL 或 apiKey' })
     }
+
     try {
       const client = new OpenAI({ baseURL, apiKey })
       const res = await client.models.list()
-      // res.data: Array<{ id, object, created, owned_by }>
       const models = res.data
-        .map((m: any) => ({ id: m.id, ownedBy: m.owned_by ?? '' }))
+        .map((item: any) => ({ id: item.id, ownedBy: item.owned_by ?? '' }))
         .sort((a, b) => a.id.localeCompare(b.id))
+
       return reply.send({
         success: true,
         data: { models, total: models.length },
-      } as ApiResponse<{ models: { id: string; ownedBy: string }[]; total: number }>)
+      } as ApiResponse<{ models: SavedModelOption[]; total: number }>)
     } catch (err: unknown) {
       if (err instanceof OpenAI.APIError) {
         const status = err.status
-        const hint = status === 401 ? 'API Key 无效或过期'
-          : status === 404 ? `路径不存在（baseURL 可能错误，确认含 /v1）`
-          : status === 403 ? '权限不足'
-          : `HTTP ${status}`
-        return reply.status(400).send({ success: false, error: `${hint}：${err.message}` })
+        const hint = status === 401
+          ? 'API Key 无效或已过期'
+          : status === 404
+            ? '路径不存在，请确认 baseURL 包含 /v1'
+            : status === 403
+              ? '权限不足'
+              : `HTTP ${status}`
+        return reply.status(400).send({ success: false, error: `${hint}: ${err.message}` })
       }
-      const msg = (err as Error)?.message || String(err)
-      return reply.status(400).send({ success: false, error: `拉取模型列表失败：${msg}` })
+
+      const message = (err as Error)?.message || String(err)
+      return reply.status(400).send({ success: false, error: `拉取模型列表失败: ${message}` })
     }
   })
 
-  // 获取当前模型配置（apiKey 脱敏）
   app.get('/model', async (_request, reply) => {
-    return reply.send({ success: true, data: getLLMConfig() } as ApiResponse<ReturnType<typeof getLLMConfig>>)
+    return reply.send({
+      success: true,
+      data: {
+        ...getLLMConfig(),
+        quickSwitchReady: canQuickSwitchModels(),
+        availableModels: getProfileModelOptions(),
+      },
+    } as ApiResponse<ReturnType<typeof getLLMConfig> & {
+      quickSwitchReady: boolean
+      availableModels: SavedModelOption[]
+    }>)
   })
 
-  // 设置模型配置并验证连通性
-  app.post<{ Body: ModelConfig & { skipValidate?: boolean } }>('/model', async (request, reply) => {
+  app.post<{
+    Body: ModelConfig & { skipValidate?: boolean; availableModels?: SavedModelOption[] }
+  }>('/model', async (request, reply) => {
     const config = request.body
+    const availableModels = Array.isArray(request.body.availableModels)
+      ? request.body.availableModels
+      : []
+
     if (!config.provider || !config.apiKey || !config.model) {
       return reply.status(400).send({ success: false, error: '缺少必要的模型配置字段' })
     }
@@ -65,8 +95,8 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
 
     setLLMConfig(config)
 
-    // 已通过测试时跳过验证（保存秒响应，省一次模型调用费用 + 延迟）
     if (config.skipValidate) {
+      saveModelProfile(config, availableModels)
       return reply.send({ success: true, data: { valid: true } } as ApiResponse<{ valid: boolean }>)
     }
 
@@ -79,6 +109,8 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
           error: result.error ?? '模型连接验证失败，请检查 API Key 和 URL 是否正确',
         })
       }
+
+      saveModelProfile(config, availableModels)
       return reply.send({
         success: true,
         data: {
@@ -90,5 +122,34 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       return reply.status(400).send({ success: false, error: `验证失败: ${(err as Error).message}` })
     }
+  })
+
+  app.post<{
+    Body: { model: string; apiType?: 'chat' | 'responses' }
+  }>('/model/select', async (request, reply) => {
+    const { model, apiType } = request.body
+    if (!model) {
+      return reply.status(400).send({ success: false, error: '缺少 model' })
+    }
+
+    const nextConfig = switchToSavedModel(model, apiType)
+    if (!nextConfig?.apiKey || !nextConfig.provider || !nextConfig.model) {
+      return reply.status(400).send({ success: false, error: '请先完成模型配置' })
+    }
+
+    return reply.send({
+      success: true,
+      data: {
+        model: nextConfig.model,
+        apiType: nextConfig.apiType,
+        provider: nextConfig.provider,
+        baseURL: nextConfig.baseURL,
+      },
+    } as ApiResponse<{
+      model: string
+      apiType?: 'chat' | 'responses'
+      provider: ModelConfig['provider']
+      baseURL?: string
+    }>)
   })
 }

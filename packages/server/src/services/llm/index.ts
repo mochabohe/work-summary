@@ -38,12 +38,123 @@ let currentConfig: ModelConfig = {
   model: DEEPSEEK_CONFIG.defaultModel,
 }
 
+export interface SavedModelOption {
+  id: string
+  ownedBy?: string
+}
+
+interface SavedModelProfile extends ModelConfig {
+  profileId: string
+  models: SavedModelOption[]
+}
+
+let savedModelProfiles: SavedModelProfile[] = []
+
 export function setLLMConfig(config: ModelConfig) {
   currentConfig = config
 }
 
+export function patchLLMConfig(patch: Partial<ModelConfig>) {
+  currentConfig = { ...currentConfig, ...patch }
+}
+
 export function getLLMConfig(): Omit<ModelConfig, 'apiKey'> & { apiKey: string } {
   return { ...currentConfig, apiKey: currentConfig.apiKey ? '***' : '' }
+}
+
+function buildProfileId(config: ModelConfig): string {
+  return [
+    config.provider,
+    config.baseURL ?? '',
+    config.apiKey,
+  ].join('::')
+}
+
+function mergeModelOptions(existing: SavedModelOption[], incoming: SavedModelOption[]): SavedModelOption[] {
+  const merged = new Map<string, SavedModelOption>()
+  for (const item of [...existing, ...incoming]) {
+    if (!item?.id) continue
+    merged.set(item.id, {
+      id: item.id,
+      ownedBy: item.ownedBy ?? merged.get(item.id)?.ownedBy ?? '',
+    })
+  }
+  return Array.from(merged.values()).sort((a, b) => a.id.localeCompare(b.id))
+}
+
+export function saveModelProfile(config: ModelConfig, models: SavedModelOption[] = []) {
+  const profileId = buildProfileId(config)
+  const profileModels = mergeModelOptions(
+    [{ id: config.model, ownedBy: config.provider }],
+    models,
+  )
+
+  const nextProfile: SavedModelProfile = {
+    ...config,
+    profileId,
+    models: profileModels,
+  }
+
+  const existingIndex = savedModelProfiles.findIndex(profile => profile.profileId === profileId)
+  if (existingIndex >= 0) {
+    const existing = savedModelProfiles[existingIndex]
+    savedModelProfiles[existingIndex] = {
+      ...existing,
+      ...nextProfile,
+      model: config.model,
+      models: mergeModelOptions(existing.models, profileModels),
+    }
+  } else {
+    savedModelProfiles.push(nextProfile)
+  }
+}
+
+export function getModelProfiles(): Array<{
+  profileId: string
+  provider: ModelConfig['provider']
+  baseURL?: string
+  model: string
+  apiType?: ModelConfig['apiType']
+  models: SavedModelOption[]
+}> {
+  return savedModelProfiles.map(profile => ({
+    profileId: profile.profileId,
+    provider: profile.provider,
+    baseURL: profile.baseURL,
+    model: profile.model,
+    apiType: profile.apiType,
+    models: profile.models.map(item => ({ ...item })),
+  }))
+}
+
+export function getProfileModelOptions(): SavedModelOption[] {
+  return mergeModelOptions(
+    [],
+    savedModelProfiles.flatMap(profile => profile.models),
+  )
+}
+
+export function canQuickSwitchModels(): boolean {
+  return savedModelProfiles.length > 0
+}
+
+export function switchToSavedModel(model: string, apiType?: ModelConfig['apiType']): ModelConfig | null {
+  const profile = [...savedModelProfiles]
+    .reverse()
+    .find(item => item.models.some(option => option.id === model) || item.model === model)
+
+  if (!profile) return null
+
+  const nextConfig: ModelConfig = {
+    provider: profile.provider,
+    apiKey: profile.apiKey,
+    baseURL: profile.baseURL,
+    model,
+    apiType: apiType ?? profile.apiType,
+  }
+
+  currentConfig = nextConfig
+  return { ...nextConfig }
 }
 
 export class LLMService {
@@ -182,10 +293,19 @@ export class LLMService {
       // Responses API 路径
       if (this.isResponsesMode()) {
         try {
-          const result = await this.getResponsesClient().chat([
+          const testMessages: ChatMessage[] = [
             { role: 'system', content: '你是一个测试助手。用一句话（不超过 30 字）回复用户，证明你在工作。' },
             { role: 'user', content: '请简短介绍你自己，并告诉我你是什么模型。' },
-          ])
+          ]
+          let result = await this.getResponsesClient().chat(testMessages)
+          for (let attempt = 2; attempt <= 3; attempt++) {
+            if (result.text && result.text.trim()) break
+            const raw = result.raw ?? {}
+            const shouldRetry = raw.status === 'completed' && Array.isArray(raw.output) && raw.output.length === 0
+            if (!shouldRetry) break
+            await sleep(800 * (attempt - 1))
+            result = await this.getResponsesClient().chat(testMessages)
+          }
           if (result.text && result.text.trim()) {
             return { valid: true, reply: result.text.trim(), modelUsed: result.modelUsed }
           }
