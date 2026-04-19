@@ -676,13 +676,17 @@ import { DIMENSION_SUGGESTIONS } from '@work-summary/shared'
 import { useProjectStore } from '@/stores/project'
 import { useSummaryStore } from '@/stores/summary'
 import { useSettingsStore } from '@/stores/settings'
+import { useAppStore } from '@/stores/app'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { streamGenerate, streamRefine, streamRefineSection, streamGenerateOutline, streamFromOutline } from '@/api/generate'
 import { listHistory, saveHistory, getHistory, deleteHistory, type HistoryEntry } from '@/api/history'
 
 const router = useRouter()
+const appStore = useAppStore()
 const projectStore = useProjectStore()
 const summaryStore = useSummaryStore()
 const settingsStore = useSettingsStore()
+const workspaceStore = useWorkspaceStore()
 
 const md = new MarkdownIt()
 const customDim = ref('')
@@ -872,7 +876,27 @@ const languageLabel = computed(() => findOptionLabel(languageOptions, summarySto
 const formatLabel = computed(() => findOptionLabel(formatOptions, summaryStore.format))
 const writingSummaryLabel = computed(() => `${toneLabel.value} / ${lengthLabel.value} / ${languageLabel.value}`)
 
+function getMonthRangeEnd(value: string): string {
+  const [year, month] = value.split('-').map(Number)
+  const lastDay = new Date(year, month, 0).getDate()
+  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+}
+
+const generalPeriod = computed(() => ({
+  type: 'custom' as const,
+  start: `${settingsStore.startDate}-01`,
+  end: getMonthRangeEnd(settingsStore.endDate),
+  label: `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
+}))
+
+const generalWorkItems = computed(() => (
+  workspaceStore.filterByPeriod(generalPeriod.value)
+))
+
 const canGenerate = computed(() => {
+  if (appStore.isGeneral) {
+    return generalWorkItems.value.length > 0 || summaryStore.feishuDocs.length > 0
+  }
   return projectStore.analyses.size > 0
     || (projectStore.scanResult?.standaloneDocuments?.length ?? 0) > 0
     || summaryStore.feishuDocs.length > 0
@@ -946,7 +970,9 @@ function generate() {
       configCollapsed.value = true
       ElMessage.success('总结生成完成!')
       // 自动保存到历史
-      const projects = projectStore.getSelectedAnalyses().map(a => a.project.name)
+      const projects = appStore.isGeneral
+        ? generalWorkItems.value.slice(0, 5).map(item => item.title)
+        : projectStore.getSelectedAnalyses().map(a => a.project.name)
       const docType = summaryStore.docType || 'yearly-summary'
       const docTypeLabel: Record<string, string> = {
         'yearly-summary': '年终总结', 'quarterly-review': '季度复盘',
@@ -959,8 +985,10 @@ function generate() {
         content: summaryStore.content,
         metadata: {
           docType,
-          gitAuthor: settingsStore.gitAuthor || '',
-          dateRange: `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
+          gitAuthor: appStore.isGeneral ? '' : (settingsStore.gitAuthor || ''),
+          dateRange: appStore.isGeneral
+            ? `${generalPeriod.value.start} ~ ${generalPeriod.value.end}`
+            : `${settingsStore.startDate} ~ ${settingsStore.endDate}`,
           projects,
         },
       }).catch(() => {})
@@ -1267,8 +1295,12 @@ function submitCustomRefine() {
 // ===== 大纲模式 =====
 function buildGenerateRequest() {
   const analyses = projectStore.getSelectedAnalyses()
+  const workItems = appStore.isGeneral ? generalWorkItems.value : undefined
   return {
     projects: analyses,
+    workItems,
+    period: appStore.isGeneral ? generalPeriod.value : undefined,
+    mode: appStore.mode ?? 'developer',
     feishuDocs: summaryStore.feishuDocs,
     standaloneDocuments: projectStore.scanResult?.standaloneDocuments || [],
     dimensions: summaryStore.dimensions,
@@ -2263,4 +2295,3 @@ function moveOutline(index: number, direction: number) {
   margin: 0;
 }
 </style>
-

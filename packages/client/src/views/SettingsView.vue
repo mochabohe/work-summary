@@ -18,64 +18,48 @@
       </div>
     </el-card>
 
-    <!-- 通用模式下的指引 -->
-    <el-alert
-      v-if="appStore.isGeneral"
-      type="info"
-      :closable="false"
-      title="通用模式下方配置仅对 AI 模型有效"
-      description="Git 用户名、日期、项目扫描等选项只影响研发模式。你可以直接进入『工作空间』开始录入。"
-      style="margin-bottom: 16px;"
-      show-icon
-    >
-      <template #default>
-        <span>通用模式下方「Git 用户名 / 总结日期」等字段仅研发模式使用，你可以忽略它们。</span>
-        <el-button size="small" type="primary" link @click="$router.push('/workspace')">
-          进入工作空间 →
-        </el-button>
-      </template>
-    </el-alert>
-
-    <el-card :class="{ 'developer-only': appStore.isGeneral }">
+    <el-card>
       <template #header>
-        <span>基础配置{{ appStore.isGeneral ? '（研发模式专用）' : '' }}</span>
+        <span>{{ settingsCardTitle }}</span>
       </template>
 
       <el-form label-width="140px" :model="settings">
-        <el-form-item label="Git 用户名" required>
-          <el-input
-            v-model="settings.gitAuthor"
-            placeholder="用于过滤 Git 提交，如: your-name 或 your-email@example.com"
-          />
-          <div class="form-tip">
-            填写你的 Git 用户名或邮箱，用于在多人协作项目中识别你的代码贡献
-          </div>
-        </el-form-item>
-
-        <el-form-item label="总结日期">
-          <div class="date-range">
-            <el-date-picker
-              v-model="settings.startDate"
-              type="month"
-              placeholder="开始月份"
-              format="YYYY-MM"
-              value-format="YYYY-MM"
+        <template v-if="!appStore.isGeneral">
+          <el-form-item label="Git 用户名" required>
+            <el-input
+              v-model="settings.gitAuthor"
+              placeholder="用于过滤 Git 提交，如: your-name 或 your-email@example.com"
             />
-            <span class="date-separator">至</span>
-            <el-date-picker
-              v-model="settings.endDate"
-              type="month"
-              placeholder="结束月份"
-              format="YYYY-MM"
-              value-format="YYYY-MM"
-            />
-          </div>
-          <div class="form-tip">
-            选择总结的时间范围，用于过滤 Git 提交记录
-          </div>
-        </el-form-item>
+            <div class="form-tip">
+              填写你的 Git 用户名或邮箱，用于在多人协作项目中识别你的代码贡献
+            </div>
+          </el-form-item>
 
-        <el-form-item label="我的角色">
+          <el-form-item label="总结日期">
+            <div class="date-range">
+              <el-date-picker
+                v-model="settings.startDate"
+                type="month"
+                placeholder="开始月份"
+                format="YYYY-MM"
+                value-format="YYYY-MM"
+              />
+              <span class="date-separator">至</span>
+              <el-date-picker
+                v-model="settings.endDate"
+                type="month"
+                placeholder="结束月份"
+                format="YYYY-MM"
+                value-format="YYYY-MM"
+              />
+            </div>
+            <div class="form-tip">
+              选择总结的时间范围，用于过滤 Git 提交记录
+            </div>
+          </el-form-item>
+        </template>
+
+        <el-form-item :label="roleFieldLabel">
           <div class="role-selector">
             <el-check-tag
               v-for="role in presetRoles"
@@ -124,9 +108,7 @@
               </div>
             </el-popover>
           </div>
-          <div class="form-tip">
-            选择你的职业角色，帮助 AI 生成更贴合岗位特点的总结（可多选）
-          </div>
+          <div class="form-tip">{{ roleFieldTip }}</div>
         </el-form-item>
 
       </el-form>
@@ -150,13 +132,16 @@ import { useAppStore } from '@/stores/app'
 const appStore = useAppStore()
 
 async function onSwitchMode() {
+  const nextMode = appStore.isGeneral ? 'developer' : 'general'
   const action = await ElMessageBox.confirm(
     `当前：${appStore.isGeneral ? '通用模式' : '研发模式'}。切换到${appStore.isGeneral ? '研发' : '通用'}模式？`,
     '切换模式',
     { type: 'info', confirmButtonText: '切换', cancelButtonText: '取消' },
   ).catch(() => null)
   if (!action) return
-  appStore.setMode(appStore.isGeneral ? 'developer' : 'general')
+  appStore.setMode(nextMode)
+  const activeRoleSet = new Set(nextMode === 'general' ? generalPresetRoles : developerPresetRoles)
+  settings.roles = settings.roles.filter(role => !allPresetRoles.includes(role) || activeRoleSet.has(role))
   ElMessage.success('已切换')
 }
 import api from '@/api/index'
@@ -165,7 +150,13 @@ import type { ApiResponse } from '@work-summary/shared'
 const router = useRouter()
 const settings = useSettingsStore()
 
-const canProceed = computed(() => settings.gitAuthor.length > 0)
+const canProceed = computed(() => (
+  appStore.isGeneral || settings.gitAuthor.length > 0
+))
+
+const settingsCardTitle = computed(() => (
+  appStore.isGeneral ? '通用设置' : '基础配置'
+))
 
 function goNext() {
   settings.save()
@@ -173,16 +164,35 @@ function goNext() {
 }
 
 // 角色选择
-const presetRoles = [
+const developerPresetRoles = [
   '前端开发', '后端开发', '全栈开发', '移动端开发',
   '算法工程师', '数据工程师', '测试工程师', 'DevOps',
-  '技术负责人', '项目经理', '产品经理', '架构师',
-  '销售', '运营', '市场营销', 'UI/UX 设计',
+  '技术负责人', '架构师',
+]
+
+const generalPresetRoles = [
+  '项目经理', '产品经理', '销售', '运营', '市场营销', 'UI/UX 设计',
   '人力资源', '财务', '客服', '行政',
 ]
 
+const allPresetRoles = [...developerPresetRoles, ...generalPresetRoles]
+
+const presetRoles = computed(() => (
+  appStore.isGeneral ? generalPresetRoles : developerPresetRoles
+))
+
+const roleFieldLabel = computed(() => (
+  appStore.isGeneral ? '通用角色' : '研发角色'
+))
+
+const roleFieldTip = computed(() => (
+  appStore.isGeneral
+    ? '选择你的通用岗位角色，帮助 AI 生成更贴合工作场景的总结（可多选）'
+    : '选择你的研发岗位角色，帮助 AI 生成更贴合技术工作特点的总结（可多选）'
+))
+
 const customRoles = computed(() =>
-  settings.roles.filter(r => !presetRoles.includes(r))
+  settings.roles.filter(r => !allPresetRoles.includes(r))
 )
 
 function toggleRole(role: string) {

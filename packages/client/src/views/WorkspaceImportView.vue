@@ -8,32 +8,43 @@
       <h2>从文档导入工作项</h2>
     </div>
 
-    <!-- 上传区：3 种方式 -->
     <div class="upload-grid" v-if="draft.length === 0 && !extracting">
-      <!-- 方式 1：AI 解析 -->
       <div class="upload-card">
         <div class="card-icon">📄</div>
         <h3>文档智能抽取</h3>
-        <p>上传周报/月报/会议纪要（Word / PDF / PPT / Markdown / TXT），<br>AI 自动结构化为工作项</p>
-        <el-upload
-          :auto-upload="false"
-          :show-file-list="false"
+        <p>
+          上传周报、月报、会议纪要（Word / PDF / PPT / Markdown / TXT），
+          <br>
+          AI 自动结构化为工作项
+        </p>
+        <input
+          ref="docInputRef"
+          type="file"
+          multiple
           accept=".docx,.pdf,.pptx,.md,.txt,.html,.htm"
-          :on-change="handleDocUpload"
+          class="hidden-input"
+          @change="handleDocSelect"
         >
-          <el-button type="primary" size="large" :loading="parsing">
-            <el-icon><Upload /></el-icon>
-            选择文档
-          </el-button>
-        </el-upload>
-        <p class="card-hint">单文件 ≤ 20MB</p>
+        <el-button
+          type="primary"
+          size="large"
+          :loading="parsing || extracting"
+          @click="openDocPicker"
+        >
+          <el-icon><Upload /></el-icon>
+          选择文档
+        </el-button>
+        <p class="card-hint">单文件 <= 20MB，支持多选文件</p>
       </div>
 
-      <!-- 方式 2：Excel 批量 -->
       <div class="upload-card">
         <div class="card-icon">📊</div>
         <h3>Excel 批量导入</h3>
-        <p>按固定列模板填写，一次性导入多条工作项，<br>无需 AI 解析，速度快精度高</p>
+        <p>
+          按固定模板填写，一次性导入多条工作项，
+          <br>
+          无需 AI 解析，速度更快精度更高
+        </p>
         <div class="card-actions">
           <el-upload
             :auto-upload="false"
@@ -54,21 +65,19 @@
       </div>
     </div>
 
-    <!-- 正在抽取 -->
     <div v-if="extracting" class="extracting-box">
       <el-icon class="spin"><Loading /></el-icon>
-      <p>AI 正在分析文档结构，抽取工作项...</p>
-      <p class="hint">通常需要 10-30 秒</p>
+      <p>{{ progressText || 'AI 正在分析文档结构，抽取工作项...' }}</p>
+      <p class="hint">通常需要 10-30 秒，文档越多耗时越长</p>
     </div>
 
-    <!-- 抽取结果：待确认列表 -->
     <div v-if="draft.length > 0 && !extracting" class="draft-section">
       <div class="draft-header">
         <div>
           <h3>识别到 {{ draft.length }} 条工作项</h3>
           <p class="draft-hint" v-if="lowConfCount > 0">
             <el-icon color="#f59e0b"><Warning /></el-icon>
-            {{ lowConfCount }} 条置信度较低，建议您确认细节后再保存
+            {{ lowConfCount }} 条置信度较低，建议确认细节后再保存
           </p>
         </div>
         <div>
@@ -125,7 +134,6 @@
       </div>
     </div>
 
-    <!-- 编辑弹窗 -->
     <WorkItemEditor
       v-if="editingItem"
       :item="editingItem"
@@ -136,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -155,6 +163,8 @@ const parsing = ref(false)
 const extracting = ref(false)
 const excelLoading = ref(false)
 const editingItem = ref<WorkItem | null>(null)
+const docInputRef = ref<HTMLInputElement | null>(null)
+const progressText = ref('')
 
 const draft = computed(() => store.importDraft)
 const lowConfCount = computed(() => store.lowConfidenceDraftCount)
@@ -165,47 +175,86 @@ function confClass(c: number) {
   return 'low'
 }
 
-async function handleDocUpload(uploadFile: UploadFile) {
-  const file = uploadFile.raw
-  if (!file) return
-  parsing.value = true
+function openDocPicker() {
+  docInputRef.value?.click()
+}
+
+async function handleDocSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  if (files.length === 0) return
+
+  const oversizeFile = files.find(file => file.size > 20 * 1024 * 1024)
+  if (oversizeFile) {
+    ElMessage.warning(`文件 ${oversizeFile.name} 超过 20MB 限制`)
+    input.value = ''
+    return
+  }
+
+  const collectedItems: WorkItem[] = []
+  let parsedCount = 0
+
   try {
-    const parsed = await parseDocument(file)
-    parsing.value = false
-    extracting.value = true
-    const res = await extractItems(parsed.text)
-    if (res.warning) {
-      ElMessage.warning(res.warning)
+    parsing.value = true
+    progressText.value = `正在解析 1 / ${files.length} 个文档...`
+
+    for (const [index, file] of files.entries()) {
+      parsing.value = true
+      extracting.value = false
+      progressText.value = `正在解析 ${index + 1} / ${files.length} 个文档：${file.name}`
+      const parsed = await parseDocument(file)
+      parsedCount += 1
+
+      parsing.value = false
+      extracting.value = true
+      progressText.value = `正在抽取 ${index + 1} / ${files.length} 个文档中的工作项：${file.name}`
+      const res = await extractItems(parsed.text)
+
+      if (res.warning) {
+        ElMessage.warning(`${file.name}：${res.warning}`)
+        continue
+      }
+
+      collectedItems.push(...res.items)
+    }
+
+    if (collectedItems.length === 0) {
+      ElMessage.info(files.length === 1
+        ? '未从文档中识别到工作项，请尝试手动录入'
+        : '未从所选文档中识别到工作项，请尝试手动录入')
       return
     }
-    if (res.items.length === 0) {
-      ElMessage.info('未从文档中识别到工作项，请尝试手动录入')
-      return
-    }
-    store.setDraft(res.items)
-    ElMessage.success(`识别出 ${res.items.length} 条工作项，请确认后导入`)
+
+    store.setDraft(collectedItems)
+    ElMessage.success(files.length === 1
+      ? `识别出 ${collectedItems.length} 条工作项，请确认后导入`
+      : `已解析 ${parsedCount} 个文档，识别出 ${collectedItems.length} 条工作项`)
   } catch (err) {
     ElMessage.error(`解析失败：${(err as Error).message}`)
   } finally {
     parsing.value = false
     extracting.value = false
+    progressText.value = ''
+    input.value = ''
   }
 }
 
 async function handleExcelUpload(uploadFile: UploadFile) {
   const file = uploadFile.raw
   if (!file) return
+
   excelLoading.value = true
   try {
     const res = await importExcel(file)
     if (res.items.length === 0) {
-      ElMessage.warning('未从 Excel 中解析到有效工作项（标题为空的行会被跳过）')
+      ElMessage.warning('未从 Excel 中解析到有效工作项，标题为空的行会被跳过')
       return
     }
+
     store.setDraft(res.items)
-    const msg = `识别 ${res.items.length} 条工作项`
-      + (res.skipped > 0 ? `，跳过 ${res.skipped} 条` : '')
+    const msg = `识别 ${res.items.length} 条工作项${res.skipped > 0 ? `，跳过 ${res.skipped} 条` : ''}`
     ElMessage.success(msg)
+
     if (res.errors.length > 0) {
       ElMessageBox.alert(res.errors.join('\n'), '部分行解析失败', { type: 'warning' })
     }
@@ -261,7 +310,6 @@ function onEditorSave(item: WorkItem) {
   font-size: 22px;
 }
 
-/* ============= 上传卡片 ============= */
 .upload-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -296,14 +344,18 @@ function onEditorSave(item: WorkItem) {
 
 .upload-card p {
   font-size: 13px;
-  color: var(--ws-text-secondary, rgba(255,255,255,0.6));
+  color: var(--ws-text-secondary, rgba(255, 255, 255, 0.6));
   line-height: 1.7;
   margin-bottom: 20px;
 }
 
+.hidden-input {
+  display: none;
+}
+
 .card-hint {
   font-size: 12px;
-  color: var(--ws-text-muted, rgba(255,255,255,0.4));
+  color: var(--ws-text-muted, rgba(255, 255, 255, 0.4));
   margin-top: 10px;
   margin-bottom: 0;
 }
@@ -314,7 +366,6 @@ function onEditorSave(item: WorkItem) {
   justify-content: center;
 }
 
-/* ============= 抽取中 ============= */
 .extracting-box {
   text-align: center;
   padding: 80px 24px;
@@ -341,12 +392,7 @@ function onEditorSave(item: WorkItem) {
 
 .extracting-box .hint {
   font-size: 12px;
-  color: var(--ws-text-muted, rgba(255,255,255,0.5));
-}
-
-/* ============= 草稿列表 ============= */
-.draft-section {
-  /* 无额外样式 */
+  color: var(--ws-text-muted, rgba(255, 255, 255, 0.5));
 }
 
 .draft-header {
@@ -421,9 +467,21 @@ function onEditorSave(item: WorkItem) {
   border-radius: 10px;
   font-weight: 700;
 }
-.conf-badge.high { background: rgba(52, 211, 153, 0.18); color: #34d399; }
-.conf-badge.mid { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
-.conf-badge.low { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+
+.conf-badge.high {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+}
+
+.conf-badge.mid {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.conf-badge.low {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
 
 .draft-meta {
   display: flex;
@@ -431,7 +489,7 @@ function onEditorSave(item: WorkItem) {
   align-items: center;
   margin-bottom: 8px;
   font-size: 12px;
-  color: var(--ws-text-secondary, rgba(255,255,255,0.6));
+  color: var(--ws-text-secondary, rgba(255, 255, 255, 0.6));
 }
 
 .meta-chip {
@@ -443,7 +501,7 @@ function onEditorSave(item: WorkItem) {
 
 .draft-desc {
   font-size: 13px;
-  color: var(--ws-text-secondary, rgba(255,255,255,0.7));
+  color: var(--ws-text-secondary, rgba(255, 255, 255, 0.7));
   line-height: 1.7;
   margin: 0 0 8px;
 }
@@ -456,19 +514,21 @@ function onEditorSave(item: WorkItem) {
 
 .metric {
   font-size: 12px;
-  color: var(--ws-text-secondary, rgba(255,255,255,0.7));
+  color: var(--ws-text-secondary, rgba(255, 255, 255, 0.7));
   background: rgba(255, 255, 255, 0.04);
   padding: 3px 10px;
   border-radius: 6px;
 }
 
 .metric strong {
-  color: var(--ws-text-muted, rgba(255,255,255,0.5));
+  color: var(--ws-text-muted, rgba(255, 255, 255, 0.5));
   font-weight: 500;
   margin-right: 4px;
 }
 
 @media (max-width: 700px) {
-  .upload-grid { grid-template-columns: 1fr; }
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

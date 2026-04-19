@@ -201,7 +201,7 @@ const loadedModels = ref<{ id: string; ownedBy: string }[]>([])
 
 const modelPresets: Record<string, string[]> = {
   openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+  anthropic: ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
 }
 
 const providerBaseURLMap: Record<string, string> = {
@@ -284,7 +284,7 @@ async function loadModels() {
   loadingModels.value = true
   loadedModels.value = []
   try {
-    const baseURL = modelProvider.value === 'custom'
+    const baseURL = (modelProvider.value === 'custom' || (modelProvider.value === 'anthropic' && modelBaseURL.value))
       ? modelBaseURL.value
       : providerBaseURLMap[modelProvider.value]
     const res = await api.post('/config/list-models', {

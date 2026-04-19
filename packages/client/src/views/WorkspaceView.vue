@@ -220,7 +220,7 @@ function goImport() {
 }
 
 function goGenerate() {
-  router.push('/workspace/generate')
+  router.push('/generate')
 }
 </script>
 

@@ -508,6 +508,11 @@ ${options.format === 'star' ? `
       parts.push('---')
     }
 
+    if (request.workItems && request.workItems.length > 0) {
+      parts.push('\n## 工作项列表')
+      parts.push(this.formatWorkItemsPacket(request.workItems))
+    }
+
     if (request.standaloneDocuments && request.standaloneDocuments.length > 0) {
       parts.push('\n## 独立文档')
       for (const doc of request.standaloneDocuments.slice(0, 10)) {

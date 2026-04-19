@@ -41,7 +41,7 @@
         <el-icon><ChatDotSquare /></el-icon>
         <span>补充材料</span>
       </el-menu-item>
-      <el-menu-item :index="appStore.isGeneral ? '/workspace/generate' : '/generate'">
+      <el-menu-item index="/generate">
         <el-icon><MagicStick /></el-icon>
         <span>生成总结</span>
       </el-menu-item>
