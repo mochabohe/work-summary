@@ -1,13 +1,4 @@
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-// 支持自定义 .env 路径（Electron 打包时通过环境变量传入）
-const envPath = process.env.DOTENV_PATH || path.resolve(__dirname, '../../../.env')
-dotenv.config({ path: envPath })
-
+import './load-env.js'
 import { createApp } from './app.js'
 
 const PORT = Number(process.env.SERVER_PORT) || 3000

@@ -402,7 +402,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document, CopyDocument, Loading, SuccessFilled } from '@element-plus/icons-vue'
+import { Document, CopyDocument } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useSummaryStore } from '@/stores/summary'
 import { exportMarkdown, exportDocx, generateSlides, downloadPptx, downloadPdfSlides, checkBaiduPptStatus, exportBaiduPpt, downloadFromUrl, fetchBaiduPptThemes } from '@/api/exportApi'
@@ -953,6 +953,24 @@ async function handleExport(format: string) {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.export-actions > :deep(.el-button--warning) {
+  font-size: 0;
+}
+
+.export-actions > :deep(.el-button--warning .el-icon) {
+  margin-right: 8px;
+}
+
+.export-actions > :deep(.el-button--warning::after) {
+  content: '导出为演示文稿';
+  font-size: 16px;
+}
+
+.export-actions > :deep(.el-divider--vertical),
+.export-actions > :deep(.el-button--danger) {
+  display: none !important;
 }
 
 .baidu-style-hint {

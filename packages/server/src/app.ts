@@ -12,6 +12,7 @@ import { workspaceRoutes } from './routes/workspace.routes.js'
 
 export async function createApp() {
   const app = Fastify({
+    bodyLimit: 10 * 1024 * 1024,
     logger: true,
   })
 
