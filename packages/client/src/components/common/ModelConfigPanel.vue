@@ -8,14 +8,17 @@
       <el-select v-model="modelProvider" size="small" style="width:100%;" @change="onProviderChange">
         <el-option value="openai" label="OpenAI" />
         <el-option value="custom" label="自定义（OpenAI 兼容代理）" />
-        <el-option value="anthropic" label="Claude（Anthropic）" />
+        <el-option value="anthropic" label="Claude（Anthropic 官方 / 第三方代理）" />
       </el-select>
     </div>
+    <!-- baseURL：自定义/Anthropic 都允许填，Anthropic 留空走官方 -->
     <el-input
-      v-if="modelProvider === 'custom'"
+      v-if="modelProvider === 'custom' || modelProvider === 'anthropic'"
       v-model="modelBaseURL"
       size="small"
-      placeholder="Base URL，如 https://api.openai.com/v1"
+      :placeholder="modelProvider === 'anthropic'
+        ? '可选：第三方 Claude 代理 URL（留空走官方 api.anthropic.com）'
+        : 'Base URL，如 https://api.openai.com/v1'"
       style="margin-top:8px;"
     />
     <div v-if="modelProvider === 'custom' && baseURLHint" class="base-url-hint">
@@ -267,8 +270,9 @@ function onProviderChange(p: string) {
 
 const canLoadModels = computed(() => {
   if (!modelApiKey.value) return false
-  // 自定义必须填 baseURL；其他 provider 用预设 baseURL
+  // 自定义必须填 baseURL；anthropic 第三方代理也需要 baseURL；其他 provider 用预设
   if (modelProvider.value === 'custom' && !modelBaseURL.value) return false
+  if (modelProvider.value === 'anthropic' && !modelBaseURL.value) return false  // anthropic 官方暂不支持 /v1/models 拉取
   return true
 })
 
@@ -319,7 +323,9 @@ async function testModel() {
   requestedModel.value = modelId.value
   try {
     const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
-    const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
+    const baseURL = (modelProvider.value === 'custom' || (modelProvider.value === 'anthropic' && modelBaseURL.value))
+      ? modelBaseURL.value
+      : providerBaseURLMap[modelProvider.value]
     const res = await api.post('/config/model', {
       provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
       apiType: provider === 'openai-compatible' ? apiType.value : undefined,
@@ -341,7 +347,9 @@ async function testModel() {
 async function saveModel() {
   if (!modelApiKey.value) { ElMessage.warning('请先填写 API Key'); return }
   const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
-  const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
+  const baseURL = (modelProvider.value === 'custom' || (modelProvider.value === 'anthropic' && modelBaseURL.value))
+    ? modelBaseURL.value
+    : providerBaseURLMap[modelProvider.value]
   modelSaving.value = true
   try {
     // 已测试通过的情况下跳过重复验证（保存秒响应，省一次推理费用）

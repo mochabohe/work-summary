@@ -55,7 +55,7 @@ export class LLMService {
   }
 
   private getAnthropicClient(): AnthropicClient {
-    return new AnthropicClient(currentConfig.apiKey, currentConfig.model)
+    return new AnthropicClient(currentConfig.apiKey, currentConfig.model, currentConfig.baseURL)
   }
 
   private getResponsesClient(): OpenAIResponsesClient {
@@ -176,8 +176,7 @@ export class LLMService {
   async validateVerbose(): Promise<{ valid: boolean; error?: string; reply?: string; modelUsed?: string }> {
     try {
       if (currentConfig.provider === 'anthropic') {
-        const ok = await this.getAnthropicClient().validate()
-        return { valid: ok, error: ok ? undefined : 'Anthropic 验证失败' }
+        return await this.getAnthropicClient().validateVerbose()
       }
 
       // Responses API 路径
