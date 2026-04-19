@@ -86,14 +86,14 @@ function choose(m: AppMode) {
 
 <style scoped>
 .onboarding {
-  position: fixed;
-  inset: 0;
+  min-height: 100vh;
+  width: 100%;
   background: var(--ws-bg-primary, #0f0c29);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  z-index: 100;
+  position: relative;
 }
 
 .onboarding-bg {

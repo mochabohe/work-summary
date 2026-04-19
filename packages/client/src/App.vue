@@ -1,6 +1,8 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <div class="app-layout">
+    <!-- 全屏独立页（如 onboarding）跳过整体布局 -->
+    <router-view v-if="route.meta.fullscreen" />
+    <div v-else class="app-layout">
       <AppSidebar />
       <div class="app-main">
         <AppHeader />
@@ -14,8 +16,11 @@
 
 <script setup lang="ts">
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import { useRoute } from 'vue-router'
 import AppSidebar from './components/common/AppSidebar.vue'
 import AppHeader from './components/common/AppHeader.vue'
+
+const route = useRoute()
 </script>
 
 <style scoped>

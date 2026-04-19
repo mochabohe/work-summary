@@ -8,7 +8,7 @@ const router = createRouter({
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('@/views/OnboardingView.vue'),
-      meta: { skipModeGuard: true },
+      meta: { skipModeGuard: true, fullscreen: true },
     },
     {
       path: '/',
