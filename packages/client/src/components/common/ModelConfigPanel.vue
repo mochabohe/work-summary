@@ -7,10 +7,36 @@
         <el-option value="custom" label="自定义（OpenAI 兼容）" />
         <el-option value="anthropic" label="Claude（Anthropic）" />
       </el-select>
-      <el-select v-if="modelProvider !== 'custom'" v-model="modelId" size="small" style="width:200px;">
+      <!-- 已加载模型列表：显示下拉 -->
+      <el-select
+        v-if="loadedModels.length > 0"
+        v-model="modelId"
+        size="small"
+        style="width:200px;"
+        filterable
+        placeholder="选择模型"
+      >
+        <el-option
+          v-for="m in loadedModels"
+          :key="m.id"
+          :value="m.id"
+          :label="m.id"
+        >
+          <span>{{ m.id }}</span>
+          <span v-if="m.ownedBy" class="owned-by">{{ m.ownedBy }}</span>
+        </el-option>
+      </el-select>
+      <!-- 未加载：内置预设下拉 -->
+      <el-select
+        v-else-if="modelProvider !== 'custom'"
+        v-model="modelId"
+        size="small"
+        style="width:200px;"
+      >
         <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m" />
       </el-select>
-      <el-input v-else v-model="modelId" size="small" placeholder="模型 ID，如 gpt-4o" style="width:200px;" />
+      <!-- 自定义且未加载：手填 -->
+      <el-input v-else v-model="modelId" size="small" placeholder="模型 ID 或先点拉取" style="width:200px;" />
     </div>
     <el-input
       v-if="modelProvider === 'custom'"
@@ -30,12 +56,28 @@
       placeholder="API Key"
       style="margin-top:8px;"
     />
+
+    <!-- 拉取模型列表（自定义或想确认其他 provider 时） -->
     <div class="model-actions">
+      <el-button
+        size="small"
+        :loading="loadingModels"
+        @click="loadModels"
+        :disabled="!canLoadModels"
+      >
+        <el-icon><RefreshRight /></el-icon>
+        拉取模型列表
+      </el-button>
       <el-button size="small" :loading="modelTesting" @click="testModel">测试连接</el-button>
       <el-button size="small" type="primary" @click="saveModel">保存</el-button>
       <span v-if="modelTestResult && !modelReply" :class="modelTestResult === 'ok' ? 'ok' : 'err'">
         {{ modelTestResult === 'ok' ? '✓ 连接正常' : '✗ ' + modelTestResult }}
       </span>
+    </div>
+
+    <!-- 已加载模型数量提示 -->
+    <div v-if="loadedModels.length > 0" class="loaded-tip">
+      ✓ 已加载 {{ loadedModels.length }} 个模型，从下拉选择即可
     </div>
 
     <!-- 模型真实回复（会话测试） -->
@@ -52,13 +94,14 @@
         ⚠️ 注意：你请求的是「{{ requestedModel }}」，但代理实际返回的是「{{ modelUsed }}」——该代理可能进行了模型替换
       </div>
     </div>
-    <div class="tip">切换模型后点击"测试连接"确认可用，再"保存"生效</div>
+    <div class="tip">建议先「拉取模型列表」确认代理支持哪些模型，再选择并测试连接</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { RefreshRight } from '@element-plus/icons-vue'
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
 
@@ -71,6 +114,8 @@ const modelTestResult = ref('')
 const modelReply = ref('')
 const modelUsed = ref('')
 const requestedModel = ref('')
+const loadingModels = ref(false)
+const loadedModels = ref<{ id: string; ownedBy: string }[]>([])
 
 const modelPresets: Record<string, string[]> = {
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
@@ -99,6 +144,44 @@ function onProviderChange(p: string) {
   modelTestResult.value = ''
   modelReply.value = ''
   modelUsed.value = ''
+  loadedModels.value = []
+}
+
+const canLoadModels = computed(() => {
+  if (!modelApiKey.value) return false
+  // 自定义必须填 baseURL；其他 provider 用预设 baseURL
+  if (modelProvider.value === 'custom' && !modelBaseURL.value) return false
+  return true
+})
+
+async function loadModels() {
+  if (!canLoadModels.value) {
+    ElMessage.warning('请先填写 API Key' + (modelProvider.value === 'custom' ? ' 和 Base URL' : ''))
+    return
+  }
+  loadingModels.value = true
+  loadedModels.value = []
+  try {
+    const baseURL = modelProvider.value === 'custom'
+      ? modelBaseURL.value
+      : providerBaseURLMap[modelProvider.value]
+    const res = await api.post('/config/list-models', {
+      baseURL,
+      apiKey: modelApiKey.value,
+    }) as unknown as ApiResponse<{ models: { id: string; ownedBy: string }[]; total: number }>
+    if (res.success && res.data) {
+      loadedModels.value = res.data.models
+      ElMessage.success(`✓ 拉取到 ${res.data.total} 个模型`)
+      // 如果当前模型 ID 不在列表里，自动选第一个
+      if (!loadedModels.value.find(m => m.id === modelId.value)) {
+        modelId.value = loadedModels.value[0]?.id ?? modelId.value
+      }
+    }
+  } catch (e: any) {
+    ElMessage.error(`拉取失败：${e.message || e}`)
+  } finally {
+    loadingModels.value = false
+  }
 }
 
 async function testModel() {
@@ -215,6 +298,20 @@ async function saveModel() {
   margin-top: 8px;
   font-size: 11px;
   color: #fbbf24;
+  line-height: 1.6;
+}
+
+.owned-by {
+  float: right;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 12px;
+}
+
+.loaded-tip {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #34d399;
   line-height: 1.6;
 }
 </style>

@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify'
+import OpenAI from 'openai'
 import { LLMService, setLLMConfig, getLLMConfig } from '../services/llm/index.js'
 import type { ApiResponse, ModelConfig } from '@work-summary/shared'
 
@@ -11,6 +12,39 @@ export const configRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ success: true, data: { valid, models: valid ? ['deepseek-chat', 'deepseek-reasoner'] : [] } })
     } catch {
       return reply.send({ success: true, data: { valid: false, models: [] } })
+    }
+  })
+
+  // 拉取代理支持的模型列表（OpenAI 标准 /v1/models 接口）
+  app.post<{
+    Body: { baseURL: string; apiKey: string }
+  }>('/list-models', async (request, reply) => {
+    const { baseURL, apiKey } = request.body
+    if (!baseURL || !apiKey) {
+      return reply.status(400).send({ success: false, error: '缺少 baseURL 或 apiKey' })
+    }
+    try {
+      const client = new OpenAI({ baseURL, apiKey })
+      const res = await client.models.list()
+      // res.data: Array<{ id, object, created, owned_by }>
+      const models = res.data
+        .map((m: any) => ({ id: m.id, ownedBy: m.owned_by ?? '' }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+      return reply.send({
+        success: true,
+        data: { models, total: models.length },
+      } as ApiResponse<{ models: { id: string; ownedBy: string }[]; total: number }>)
+    } catch (err: unknown) {
+      if (err instanceof OpenAI.APIError) {
+        const status = err.status
+        const hint = status === 401 ? 'API Key 无效或过期'
+          : status === 404 ? `路径不存在（baseURL 可能错误，确认含 /v1）`
+          : status === 403 ? '权限不足'
+          : `HTTP ${status}`
+        return reply.status(400).send({ success: false, error: `${hint}：${err.message}` })
+      }
+      const msg = (err as Error)?.message || String(err)
+      return reply.status(400).send({ success: false, error: `拉取模型列表失败：${msg}` })
     }
   })
 
