@@ -47,13 +47,14 @@
       </span>
     </div>
 
-    <!-- 步骤引导式操作区（4 步：拉取 → 选择 → 测试 → 保存） -->
+    <!-- 步骤引导式操作区（4 步：纵向） -->
     <div class="step-flow">
       <!-- 步骤 1：拉取模型列表 -->
       <div class="step" :class="{ active: activeStep === 1, done: loadedModels.length > 0 }">
         <div class="step-num">{{ loadedModels.length > 0 ? '✓' : '1' }}</div>
-        <div class="step-body">
-          <div class="step-title">拉取模型</div>
+        <div class="step-label">拉取模型</div>
+        <div class="step-action">
+          <span v-if="loadedModels.length > 0" class="step-done-hint">{{ loadedModels.length }} 个可选</span>
           <el-button
             size="small"
             :type="activeStep === 1 ? 'primary' : ''"
@@ -64,22 +65,19 @@
             <el-icon><RefreshRight /></el-icon>
             {{ loadedModels.length > 0 ? '重新拉取' : '拉取' }}
           </el-button>
-          <span v-if="loadedModels.length > 0" class="step-done-hint">✓ {{ loadedModels.length }} 个</span>
         </div>
       </div>
 
-      <div class="step-arrow">→</div>
-
       <!-- 步骤 2：选择模型 -->
-      <div class="step step-select" :class="{ active: activeStep === 2, done: !!modelId }">
+      <div class="step" :class="{ active: activeStep === 2, done: !!modelId }">
         <div class="step-num">{{ modelId ? '✓' : '2' }}</div>
-        <div class="step-body">
-          <div class="step-title">选择模型</div>
+        <div class="step-label">选择模型</div>
+        <div class="step-action">
           <el-select
             v-if="loadedModels.length > 0"
             v-model="modelId"
             size="small"
-            style="width: 100%;"
+            style="width: 240px;"
             filterable
             placeholder="从下拉选择"
           >
@@ -97,7 +95,7 @@
             v-else-if="modelProvider !== 'custom'"
             v-model="modelId"
             size="small"
-            style="width: 100%;"
+            style="width: 240px;"
           >
             <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m" />
           </el-select>
@@ -105,38 +103,33 @@
             v-else
             v-model="modelId"
             size="small"
+            style="width: 240px;"
             placeholder="先拉取或手填"
           />
         </div>
       </div>
 
-      <div class="step-arrow">→</div>
-
       <!-- 步骤 3：测试连接 -->
       <div class="step" :class="{ active: activeStep === 3, done: modelTestResult === 'ok' }">
         <div class="step-num">{{ modelTestResult === 'ok' ? '✓' : '3' }}</div>
-        <div class="step-body">
-          <div class="step-title">测试连接</div>
+        <div class="step-label">测试连接</div>
+        <div class="step-action">
+          <span v-if="modelTestResult === 'ok'" class="step-done-hint">已通过</span>
           <el-button
             size="small"
             :type="activeStep === 3 ? 'primary' : ''"
             :loading="modelTesting"
             :disabled="!modelApiKey || !modelId"
             @click="testModel"
-          >
-            {{ modelTestResult === 'ok' ? '重新测试' : '测试' }}
-          </el-button>
-          <span v-if="modelTestResult === 'ok'" class="step-done-hint">✓ 已通过</span>
+          >{{ modelTestResult === 'ok' ? '重新测试' : '测试' }}</el-button>
         </div>
       </div>
-
-      <div class="step-arrow">→</div>
 
       <!-- 步骤 4：保存 -->
       <div class="step" :class="{ active: activeStep === 4 }">
         <div class="step-num">4</div>
-        <div class="step-body">
-          <div class="step-title">保存配置</div>
+        <div class="step-label">保存配置</div>
+        <div class="step-action">
           <el-button
             size="small"
             type="primary"
@@ -482,39 +475,51 @@ async function saveModel() {
   margin-left: 4px;
 }
 
-/* ==== 步骤引导 ==== */
+/* ==== 步骤引导（纵向布局） ==== */
 .step-flow {
   margin-top: 14px;
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
 .step {
-  flex: 1;
   display: flex;
-  gap: 10px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  transition: all 0.3s ease;
-  min-width: 0;
+  border-radius: 8px;
+  transition: all 0.25s ease;
+  position: relative;
 }
 
-.step.step-select {
-  flex: 1.6;  /* 选择模型卡片更宽，容纳下拉 */
+/* 步骤之间的连接线 */
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 21px;     /* 与 step-num 中心对齐 */
+  bottom: -7px;
+  width: 2px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.step.done:not(:last-child)::after {
+  background: rgba(52, 211, 153, 0.4);
 }
 
 .step.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(167, 139, 250, 0.08));
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.12), rgba(167, 139, 250, 0.08));
   border-color: rgba(167, 139, 250, 0.5);
-  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.12);
 }
 
 .step.done {
   background: rgba(52, 211, 153, 0.05);
-  border-color: rgba(52, 211, 153, 0.3);
+  border-color: rgba(52, 211, 153, 0.25);
 }
 
 .step-num {
@@ -529,7 +534,6 @@ async function saveModel() {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
 }
 
 .step.active .step-num {
@@ -543,36 +547,29 @@ async function saveModel() {
   color: #0f0c29;
 }
 
-.step-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.step-title {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+.step-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+  min-width: 70px;
   font-weight: 500;
 }
 
-.step.active .step-title {
+.step.active .step-label {
   color: #fff;
 }
 
-.step-done-hint {
-  font-size: 10px;
-  color: #34d399;
-  margin-top: 2px;
-}
-
-.step-arrow {
+.step-action {
+  flex: 1;
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.25);
-  font-size: 14px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.step-done-hint {
+  font-size: 11px;
+  color: #34d399;
 }
 
 .step-feedback {
