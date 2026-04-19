@@ -52,12 +52,29 @@
     </el-menu>
 
     <div class="sidebar-footer">
+      <el-button
+        class="model-btn"
+        @click="modelDialogVisible = true"
+      >
+        <el-icon><Cpu /></el-icon>
+        <span>AI 模型</span>
+      </el-button>
       <span class="version-tag">v1.0.0</span>
     </div>
+
+    <el-dialog
+      v-model="modelDialogVisible"
+      title="AI 模型配置"
+      width="520px"
+      align-center
+    >
+      <ModelConfigPanel />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   House,
@@ -68,11 +85,14 @@ import {
   MagicStick,
   Document,
   Notebook,
+  Cpu,
 } from '@element-plus/icons-vue'
 import { useAppStore } from '@/stores/app'
+import ModelConfigPanel from './ModelConfigPanel.vue'
 
 const route = useRoute()
 const appStore = useAppStore()
+const modelDialogVisible = ref(false)
 </script>
 
 <style scoped>
@@ -197,9 +217,37 @@ const appStore = useAppStore()
 
 /* Footer */
 .sidebar-footer {
-  padding: 14px 20px;
+  padding: 12px 14px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.model-btn {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(167, 139, 250, 0.2) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  height: 36px;
+  transition: all 0.3s ease;
+}
+
+.model-btn:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.18), rgba(167, 139, 250, 0.18)) !important;
+  border-color: rgba(167, 139, 250, 0.5) !important;
+  color: #fff !important;
+}
+
+.model-btn :deep(.el-icon) {
+  color: #a78bfa;
+  font-size: 14px;
 }
 
 .version-tag {
@@ -207,5 +255,6 @@ const appStore = useAppStore()
   color: rgba(255, 255, 255, 0.2);
   letter-spacing: 1px;
   font-family: 'Courier New', monospace;
+  text-align: center;
 }
 </style>
