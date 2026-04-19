@@ -157,7 +157,16 @@ export type SummaryLanguage = 'zh-CN' | 'en-US'
 export type SummaryFormat = 'bullets' | 'star'
 
 export interface GenerateRequest {
-  projects: ProjectAnalysis[]
+  /** 研发模式入参（保留） */
+  projects?: ProjectAnalysis[]
+  /** 通用模式入参（新增）：跨模式统一工作项 */
+  workItems?: WorkItem[]
+  /** 报告周期（通用模式必填，研发模式可选） */
+  period?: ReportPeriod
+  /** 模板 id（通用模式必填，研发模式可选） */
+  templateId?: string
+  /** 应用模式（用于服务端选择 prompt 路径） */
+  mode?: AppMode
   standaloneDocuments?: DocumentContent[]
   feishuDocs?: { content: string }[]
   roles?: string[]
@@ -281,6 +290,74 @@ export const PROJECT_MARKERS = [
   'Makefile',
   '.git',
 ] as const
+
+// ============================
+// 通用模式类型（Phase 1+ 新增）
+// ============================
+
+/** 应用模式：研发模式（Git 扫描）/ 通用模式（手动+文档） */
+export type AppMode = 'developer' | 'general'
+
+/** 工作项 - 两种模式统一的数据抽象 */
+export interface WorkItem {
+  id: string
+  /** 数据来源 */
+  source: 'git' | 'document' | 'manual'
+  /** 工作项标题 */
+  title: string
+  /** 分类（项目/活动/事务/学习等，可自定义） */
+  category?: string
+  /** 时间范围 */
+  date: { start: string; end?: string }
+  /** 数据成果（如：转化率提升 12%） */
+  metrics?: { label: string; value: string }[]
+  /** 详细说明 */
+  description: string
+  /** 标签 */
+  tags?: string[]
+  /** LLM 抽取置信度 0-1（仅 source=document 时有值） */
+  confidence?: number
+  /** 原始数据快照（便于追溯） */
+  raw?: unknown
+}
+
+/** 报告周期类型 */
+export type ReportPeriodType = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
+
+/** 报告周期 */
+export interface ReportPeriod {
+  type: ReportPeriodType
+  /** ISO 日期 yyyy-MM-dd */
+  start: string
+  end: string
+  /** 展示标签：2026-W16 / 2026-04 / 2026-Q2 / 2026 / 自定义 */
+  label: string
+}
+
+/** 模板章节定义 */
+export interface TemplateSection {
+  key: string
+  title: string
+  required: boolean
+  /** 写作提示，注入 LLM prompt */
+  hint: string
+}
+
+/** 报告模板 */
+export interface ReportTemplate {
+  id: string
+  name: string
+  period: ReportPeriodType
+  /** 适用的模式 */
+  appliesTo: AppMode[]
+  sections: TemplateSection[]
+  /** 周期/模式专属的额外 prompt 提示 */
+  promptHints: string
+  /** 对应的 PPT 模板 id（可选） */
+  pptTemplate?: string
+  /** 是否内置（用户自定义模板为 false） */
+  builtin?: boolean
+}
 
 /** 总结维度建议列表 */
 export const DIMENSION_SUGGESTIONS = [

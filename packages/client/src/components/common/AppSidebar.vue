@@ -18,14 +18,25 @@
         <el-icon><Setting /></el-icon>
         <span>配置设置</span>
       </el-menu-item>
-      <el-menu-item index="/scan">
-        <el-icon><FolderOpened /></el-icon>
-        <span>扫描文件</span>
+
+      <!-- 研发模式专属：Git 扫描流程 -->
+      <template v-if="!appStore.isGeneral">
+        <el-menu-item index="/scan">
+          <el-icon><FolderOpened /></el-icon>
+          <span>扫描文件</span>
+        </el-menu-item>
+        <el-menu-item index="/analysis">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>分析结果</span>
+        </el-menu-item>
+      </template>
+
+      <!-- 通用模式专属：工作空间 -->
+      <el-menu-item v-if="appStore.isGeneral" index="/workspace">
+        <el-icon><Notebook /></el-icon>
+        <span>工作空间</span>
       </el-menu-item>
-      <el-menu-item index="/analysis">
-        <el-icon><DataAnalysis /></el-icon>
-        <span>分析结果</span>
-      </el-menu-item>
+
       <el-menu-item index="/feishu">
         <el-icon><ChatDotSquare /></el-icon>
         <span>补充材料</span>
@@ -56,9 +67,12 @@ import {
   ChatDotSquare,
   MagicStick,
   Document,
+  Notebook,
 } from '@element-plus/icons-vue'
+import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
+const appStore = useAppStore()
 </script>
 
 <style scoped>

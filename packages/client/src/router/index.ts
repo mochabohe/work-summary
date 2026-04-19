@@ -1,8 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAppStore } from '@/stores/app'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('@/views/OnboardingView.vue'),
+      meta: { skipModeGuard: true },
+    },
     {
       path: '/',
       name: 'home',
@@ -38,7 +45,22 @@ const router = createRouter({
       name: 'preview',
       component: () => import('@/views/PreviewView.vue'),
     },
+    {
+      path: '/workspace',
+      name: 'workspace',
+      component: () => import('@/views/WorkspaceView.vue'),
+    },
   ],
+})
+
+// 首次访问且未完成身份选择时，强制进入引导页
+router.beforeEach((to) => {
+  if (to.meta.skipModeGuard) return true
+  const appStore = useAppStore()
+  if (!appStore.onboarded) {
+    return { name: 'onboarding' }
+  }
+  return true
 })
 
 export default router

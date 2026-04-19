@@ -24,8 +24,8 @@
         </p>
 
         <div class="quick-start">
-          <button class="glow-button" @click="router.push('/settings')">
-            <span class="glow-button-text">开始使用</span>
+          <button class="glow-button" @click="onStart">
+            <span class="glow-button-text">{{ startButtonText }}</span>
             <span class="glow-button-icon">→</span>
           </button>
         </div>
@@ -81,9 +81,24 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAppStore } from '@/stores/app'
 
 const router = useRouter()
+const appStore = useAppStore()
+
+const startButtonText = computed(() =>
+  appStore.isGeneral ? '进入工作空间' : '开始使用',
+)
+
+function onStart() {
+  if (appStore.isGeneral) {
+    router.push('/workspace')
+  } else {
+    router.push('/settings')
+  }
+}
 
 const features = [
   {
