@@ -1,10 +1,13 @@
 <template>
   <div class="model-config-panel">
+    <div class="default-hint">
+      💡 后端预置 <strong>DeepSeek</strong> 作为默认模型，无需配置即可使用。下方仅在你想<strong>切换其他模型</strong>时填写。
+    </div>
+
     <div class="model-provider-row">
       <el-select v-model="modelProvider" size="small" style="width:100%;" @change="onProviderChange">
-        <el-option value="deepseek" label="DeepSeek（默认）" />
         <el-option value="openai" label="OpenAI" />
-        <el-option value="custom" label="自定义（OpenAI 兼容）" />
+        <el-option value="custom" label="自定义（OpenAI 兼容代理）" />
         <el-option value="anthropic" label="Claude（Anthropic）" />
       </el-select>
     </div>
@@ -179,8 +182,8 @@ import { RefreshRight, InfoFilled } from '@element-plus/icons-vue'
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
 
-const modelProvider = ref<'deepseek' | 'openai' | 'custom' | 'anthropic'>('deepseek')
-const modelId = ref('deepseek-chat')
+const modelProvider = ref<'openai' | 'custom' | 'anthropic'>('openai')
+const modelId = ref('gpt-4o-mini')
 const modelBaseURL = ref('')
 const modelApiKey = ref('')
 const apiType = ref<'chat' | 'responses'>('chat')
@@ -194,13 +197,11 @@ const loadingModels = ref(false)
 const loadedModels = ref<{ id: string; ownedBy: string }[]>([])
 
 const modelPresets: Record<string, string[]> = {
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
 }
 
 const providerBaseURLMap: Record<string, string> = {
-  deepseek: 'https://api.deepseek.com/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: '',
 }
@@ -362,6 +363,22 @@ async function saveModel() {
 
 <style scoped>
 .model-config-panel { width: 100%; }
+
+.default-hint {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: rgba(167, 139, 250, 0.06);
+  border: 1px dashed rgba(167, 139, 250, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.7;
+}
+.default-hint strong {
+  color: #a78bfa;
+  font-weight: 600;
+}
+
 .model-provider-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .model-actions {
   margin-top: 10px;
