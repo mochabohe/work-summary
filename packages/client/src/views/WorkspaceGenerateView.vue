@@ -187,6 +187,7 @@ import { useSummaryStore } from '@/stores/summary'
 import { useAppStore } from '@/stores/app'
 import { listTemplates, getPeriodRange } from '@/api/templates'
 import { streamGenerate } from '@/api/generate'
+import { saveHistory } from '@/api/history'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
@@ -294,6 +295,22 @@ function onGenerate() {
       generating.value = false
       summaryStore.setContent(streamContent.value)
       summaryStore.saveVersion(`${currentTemplate.value?.name} - ${period.value.label}`)
+
+      // 写入历史记录
+      saveHistory({
+        title: `${currentTemplate.value?.name ?? '工作总结'} · ${period.value.label}`,
+        content: streamContent.value,
+        metadata: {
+          docType: currentTemplate.value?.period ?? 'custom',
+          gitAuthor: '',
+          dateRange: `${period.value.start} ~ ${period.value.end}`,
+          projects: filteredItems.value.slice(0, 5).map(i => i.title),
+          mode: appStore.mode ?? 'general',
+          periodType: period.value.type,
+          templateId: selectedTemplateId.value,
+        },
+      }).catch(() => undefined)
+
       ElMessage.success('生成完成，跳转预览')
       showProgress.value = false
       router.push('/preview')

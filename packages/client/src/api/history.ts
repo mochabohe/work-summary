@@ -11,6 +11,9 @@ export interface HistoryEntry {
     gitAuthor: string
     dateRange: string
     projects: string[]
+    mode?: 'developer' | 'general'
+    periodType?: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
+    templateId?: string
   }
 }
 

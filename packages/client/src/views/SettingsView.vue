@@ -1,8 +1,44 @@
 <template>
   <div class="settings-view">
-    <el-card>
+    <!-- 模式切换卡片 -->
+    <el-card class="mode-card" shadow="never">
+      <div class="mode-row">
+        <div>
+          <div class="mode-head">
+            <span class="mode-emoji">{{ appStore.isGeneral ? '📋' : '💻' }}</span>
+            <span class="mode-name">{{ appStore.isGeneral ? '通用模式' : '研发模式' }}</span>
+          </div>
+          <div class="mode-desc">
+            {{ appStore.isGeneral
+              ? '手动录入 + 文档导入工作项，无需 Git 配置，适合产品/运营/设计等岗位'
+              : '通过 Git 日志自动分析代码贡献，需填写下方 Git 用户名与仓库路径' }}
+          </div>
+        </div>
+        <el-button @click="onSwitchMode">切换模式</el-button>
+      </div>
+    </el-card>
+
+    <!-- 通用模式下的指引 -->
+    <el-alert
+      v-if="appStore.isGeneral"
+      type="info"
+      :closable="false"
+      title="通用模式下方配置仅对 AI 模型有效"
+      description="Git 用户名、日期、项目扫描等选项只影响研发模式。你可以直接进入『工作空间』开始录入。"
+      style="margin-bottom: 16px;"
+      show-icon
+    >
+      <template #default>
+        <span>通用模式下方「Git 用户名 / 总结日期」等字段仅研发模式使用，你可以忽略它们。</span>
+        <el-button size="small" type="primary" link @click="$router.push('/workspace')">
+          进入工作空间 →
+        </el-button>
+      </template>
+    </el-alert>
+
+    <el-card :class="{ 'developer-only': appStore.isGeneral }">
       <template #header>
-        <span>基础配置</span>
+        <span>基础配置{{ appStore.isGeneral ? '（研发模式专用）' : '' }}</span>
       </template>
 
       <el-form label-width="140px" :model="settings">
@@ -148,8 +184,22 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSettingsStore } from '@/stores/settings'
+import { useAppStore } from '@/stores/app'
+
+const appStore = useAppStore()
+
+async function onSwitchMode() {
+  const action = await ElMessageBox.confirm(
+    `当前：${appStore.isGeneral ? '通用模式' : '研发模式'}。切换到${appStore.isGeneral ? '研发' : '通用'}模式？`,
+    '切换模式',
+    { type: 'info', confirmButtonText: '切换', cancelButtonText: '取消' },
+  ).catch(() => null)
+  if (!action) return
+  appStore.setMode(appStore.isGeneral ? 'developer' : 'general')
+  ElMessage.success('已切换')
+}
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
 
@@ -265,6 +315,39 @@ function removeCustomRole(role: string) {
 .settings-view {
   max-width: 700px;
   margin: 0 auto;
+}
+
+/* ====== 模式切换卡片 ====== */
+.mode-card {
+  margin-bottom: 16px;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08), rgba(167, 139, 250, 0.05)) !important;
+}
+.mode-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.mode-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.mode-emoji { font-size: 22px; }
+.mode-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ws-text-primary, #fff);
+}
+.mode-desc {
+  font-size: 12px;
+  color: var(--ws-text-secondary, rgba(255,255,255,0.6));
+  line-height: 1.7;
+}
+.developer-only {
+  opacity: 0.85;
 }
 
 .form-tip {

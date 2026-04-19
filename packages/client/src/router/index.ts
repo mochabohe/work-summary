@@ -68,12 +68,20 @@ const router = createRouter({
   ],
 })
 
-// 首次访问且未完成身份选择时，强制进入引导页
+// 路由守卫：首次引导 + 模式专属页面防呆
 router.beforeEach((to) => {
   if (to.meta.skipModeGuard) return true
   const appStore = useAppStore()
   if (!appStore.onboarded) {
     return { name: 'onboarding' }
+  }
+  // 通用模式禁止访问研发专属页
+  if (appStore.isGeneral && ['/scan', '/analysis'].includes(to.path)) {
+    return '/workspace'
+  }
+  // 研发模式禁止访问通用专属页
+  if (!appStore.isGeneral && to.path.startsWith('/workspace')) {
+    return '/'
   }
   return true
 })

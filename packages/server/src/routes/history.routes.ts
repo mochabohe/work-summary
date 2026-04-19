@@ -14,6 +14,12 @@ export interface HistoryEntry {
     gitAuthor: string
     dateRange: string
     projects: string[]
+    /** Phase 3+ 新增：生成时的模式（研发 / 通用） */
+    mode?: 'developer' | 'general'
+    /** Phase 3+ 新增：报告周期类型 */
+    periodType?: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom'
+    /** Phase 3+ 新增：模板 id */
+    templateId?: string
   }
 }
 
