@@ -2,6 +2,8 @@ import { FastifyPluginAsync } from 'fastify'
 import { LLMService } from '../services/llm/index.js'
 import { PromptBuilder } from '../services/llm/prompt-builder.js'
 import { scoreTextQuality } from '../services/algorithm/index.js'
+import { templateRegistry } from '../services/templates/registry.js'
+import { filterWorkItemsByPeriod } from '../services/templates/filter.js'
 import type { GenerateRequest, GitStats, ApiResponse, TextQualityScore } from '@work-summary/shared'
 
 /**
@@ -266,7 +268,24 @@ export const generateRoutes: FastifyPluginAsync = async (app) => {
 
       reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: '正在生成总结...' })}\n\n`)
 
-      const messages = promptBuilder.buildSummaryPrompt(params)
+      // 通用模式入口：当传入 workItems + period + templateId 时走模板路径
+      let messages
+      if (params.workItems && params.workItems.length > 0 && params.period && params.templateId) {
+        const tpl = templateRegistry.get(params.templateId)
+        if (!tpl) {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: `模板不存在: ${params.templateId}` })}\n\n`)
+          return
+        }
+        const filtered = filterWorkItemsByPeriod(params.workItems, params.period)
+        if (filtered.length === 0) {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'progress', content: '⚠️ 选定周期内无工作项，将基于业务背景生成通用框架' })}\n\n`)
+        }
+        messages = promptBuilder.buildFromTemplate(tpl, filtered, params.period, params)
+      } else {
+        // 研发模式原路径（保持零改动）
+        messages = promptBuilder.buildSummaryPrompt(params)
+      }
+
       for await (const chunk of llm.streamChat(messages)) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`)
       }

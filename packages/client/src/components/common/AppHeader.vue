@@ -61,6 +61,7 @@ const pageTitles: Record<string, string> = {
   '/workspace': '工作空间',
   '/workspace/import': '文档导入',
   '/workspace/manual': '手动录入',
+  '/workspace/generate': '生成总结',
 }
 
 // 不同模式下步骤序列不同
@@ -71,7 +72,8 @@ const developerStepMap: Record<string, number> = {
   '/settings': 0, '/scan': 1, '/analysis': 2, '/feishu': 3, '/generate': 4, '/preview': 5,
 }
 const generalStepMap: Record<string, number> = {
-  '/workspace': 1, '/feishu': 2, '/generate': 3, '/preview': 4,
+  '/workspace': 1, '/workspace/import': 1, '/workspace/manual': 1,
+  '/feishu': 2, '/workspace/generate': 3, '/generate': 3, '/preview': 4,
 }
 
 const steps = computed(() => appStore.isGeneral ? generalSteps : developerSteps)

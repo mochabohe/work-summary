@@ -1,0 +1,15 @@
+{
+  "id": "quarterly-developer",
+  "name": "季报 · 研发版",
+  "period": "quarterly",
+  "appliesTo": ["developer"],
+  "pptTemplate": "quarterly",
+  "builtin": true,
+  "sections": [
+    { "key": "okrReview", "title": "季度目标回顾", "required": true, "hint": "对照季初技术/业务目标逐条回顾达成情况，说清楚完成度以及延迟/未达成的根因" },
+    { "key": "keyProjects", "title": "重点项目", "required": true, "hint": "本季主导或深度参与的项目，按 STAR 法则写：情境-任务-行动-结果；技术方案要说清楚选型和权衡" },
+    { "key": "techEvolution", "title": "技术演进", "required": true, "hint": "本季在架构、性能、稳定性、开发效率方面的系统性改进；含影响面（多少服务/多少人受益）" },
+    { "key": "nextQuarter", "title": "下季度规划", "required": true, "hint": "3 条研发目标，含里程碑、关键技术决策点、风险和依赖；对齐业务 OKR" }
+  ],
+  "promptHints": "研发季报。读者是技术负责人或 CTO。重点展示系统性思考和技术决策能力，而非事务清单。数字要经得起查证，方案要能说出 trade-off。"
+}

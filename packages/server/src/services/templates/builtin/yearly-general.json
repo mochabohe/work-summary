@@ -1,0 +1,15 @@
+{
+  "id": "yearly-general",
+  "name": "年报 · 通用版",
+  "period": "yearly",
+  "appliesTo": ["general"],
+  "pptTemplate": "yearly",
+  "builtin": true,
+  "sections": [
+    { "key": "overview", "title": "年度总览", "required": true, "hint": "用 3-5 句话回答：今年我的核心主题是什么？带来了什么价值？一段话读完能让领导记住你" },
+    { "key": "keyProjects", "title": "重点项目", "required": true, "hint": "3-5 个全年最重要的项目，每个按 '背景 / 我的角色 / 产出 / 业务结果' 展开，附核心数据" },
+    { "key": "growth", "title": "个人成长", "required": true, "hint": "能力/方法论/影响力三个维度，说明你今年相比年初成长了什么；举具体的对比证据" },
+    { "key": "nextYear", "title": "来年规划", "required": true, "hint": "3 条围绕业务/能力/贡献的年度目标，对齐公司战略和个人发展方向" }
+  ],
+  "promptHints": "年报是向管理层展现全年价值的核心材料，可能用于晋升/调薪/优秀员工评选。风格正式、叙事有结构、数字真实可查。要能回答 '为什么值得继续投资在你身上'。"
+}

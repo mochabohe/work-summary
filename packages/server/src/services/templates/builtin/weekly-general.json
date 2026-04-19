@@ -1,0 +1,14 @@
+{
+  "id": "weekly-general",
+  "name": "周报 · 通用版",
+  "period": "weekly",
+  "appliesTo": ["general"],
+  "pptTemplate": "weekly",
+  "builtin": true,
+  "sections": [
+    { "key": "completed", "title": "本周完成", "required": true, "hint": "用事实+数据回答：完成了哪些事？产出是什么？协作了哪些人？每条控制在 2-3 句，突出结果" },
+    { "key": "issues", "title": "遇到问题", "required": false, "hint": "坦诚写出卡点，但要附上解决思路或需要的支持，展示主动思考" },
+    { "key": "nextWeek", "title": "下周计划", "required": true, "hint": "列出 3-5 条具体可执行的事项，避免'继续做 xxx'这种模糊描述" }
+  ],
+  "promptHints": "这是一份面向团队协作的周报，读者是直属领导和协作方。语气务实、节奏紧凑，重结果与协同。避免流水账，单条事项控制在 60 字以内。"
+}

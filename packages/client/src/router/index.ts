@@ -60,6 +60,11 @@ const router = createRouter({
       name: 'workspace-manual',
       component: () => import('@/views/WorkspaceManualView.vue'),
     },
+    {
+      path: '/workspace/generate',
+      name: 'workspace-generate',
+      component: () => import('@/views/WorkspaceGenerateView.vue'),
+    },
   ],
 })
 

@@ -1,0 +1,15 @@
+{
+  "id": "monthly-general",
+  "name": "月报 · 通用版",
+  "period": "monthly",
+  "appliesTo": ["general"],
+  "pptTemplate": "monthly",
+  "builtin": true,
+  "sections": [
+    { "key": "highlights", "title": "核心成果", "required": true, "hint": "3-5 条最重要的成果，每条按 '做了什么 → 带来什么价值' 展开，附上量化数据" },
+    { "key": "metrics", "title": "数据亮点", "required": true, "hint": "本月关键业务/运营指标对比上月或目标值，突出 '因为我做的某件事所以 xx 指标 +x%'" },
+    { "key": "reflection", "title": "问题反思", "required": false, "hint": "未达预期的事项和原因分析，避免找借口，展示学习闭环" },
+    { "key": "nextMonth", "title": "下月目标", "required": true, "hint": "3 条 OKR 风格目标：目标（O）+ 衡量标准（KR），避免模糊描述" }
+  ],
+  "promptHints": "月报读者通常是部门负责人或上级管理者。风格正式、结构清晰、重指标对比。要能一眼看到：做了什么、带来了什么结果、下一步怎么做。"
+}

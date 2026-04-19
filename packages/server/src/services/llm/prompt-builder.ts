@@ -1,6 +1,8 @@
 import type {
   GenerateRequest,
   ProjectAnalysis,
+  ReportPeriod,
+  ReportTemplate,
   SummaryAudience,
   SummaryDocType,
   SummaryFormat,
@@ -8,6 +10,7 @@ import type {
   SummaryLength,
   SummaryStyle,
   SummaryTone,
+  WorkItem,
 } from '@work-summary/shared'
 import type { ChatMessage } from './index.js'
 
@@ -22,6 +25,97 @@ interface PipelineOptions {
 }
 
 export class PromptBuilder {
+  /**
+   * 基于模板 + WorkItem[] 构造总结 prompt（Phase 3 通用模式入口）
+   *
+   * 与 buildSummaryPrompt 的差异：
+   * - 输入是规整的 WorkItem 数组，不是 ProjectAnalysis
+   * - 章节结构由模板严格定义（LLM 必须按 template.sections 输出对应的 ## 标题）
+   * - 注入周期专属提示（promptHints + period 的时间范围）
+   */
+  buildFromTemplate(
+    template: ReportTemplate,
+    workItems: WorkItem[],
+    period: ReportPeriod,
+    request: GenerateRequest,
+  ): ChatMessage[] {
+    const options = this.normalizeOptions(request)
+    const dimensionHint = this.buildDimensionHint(request)
+
+    const sectionSpec = template.sections
+      .map((s, i) => `${i + 1}. ## ${s.title}${s.required ? '（必填）' : '（可选，如无内容可省略）'}\n   写作要点：${s.hint}`)
+      .join('\n')
+
+    const workItemsBlock = this.formatWorkItemsPacket(workItems)
+
+    const feishuBlock = (request.feishuDocs ?? [])
+      .map((d, i) => `### 补充材料 ${i + 1}\n${d.content}`)
+      .join('\n\n')
+
+    const customBlock = request.customPrompt?.trim()
+      ? `\n\n## 用户额外要求\n${request.customPrompt.trim()}`
+      : ''
+
+    const businessBlock = request.businessContext?.trim()
+      ? `\n\n## 业务背景\n${request.businessContext.trim()}`
+      : ''
+
+    return [
+      {
+        role: 'system',
+        content: `${this.buildDraftSystemPrompt(options)}
+
+## 模板要求：${template.name}
+周期：${period.label}（${period.start} ~ ${period.end}）
+${template.promptHints}
+
+## 章节结构（必须严格按此顺序输出 Markdown）
+${sectionSpec}
+
+## 事实约束
+- 只使用用户提供的工作项数据，禁止编造数字、项目名、人名
+- 如果某个章节用户没有对应的工作项，可以写"本周/本月无对应事项"或直接跳过（仅限非必填章节）
+- 每个章节正文建议 3-5 条要点，用 "**小标题**：描述" 的 bullet 格式
+- 输出纯 Markdown，不要出现"根据提供数据"等元话术`,
+      },
+      {
+        role: 'user',
+        content: [
+          this.buildOptionsGuide(options),
+          dimensionHint,
+          businessBlock,
+          customBlock,
+          '\n## 周期内工作项（按时间倒序）',
+          workItemsBlock,
+          feishuBlock ? `\n## 补充材料\n${feishuBlock}` : '',
+          '\n请直接输出完整的 Markdown 正文，章节严格对齐上面的模板结构。',
+        ].filter(Boolean).join('\n'),
+      },
+    ]
+  }
+
+  /** 把 WorkItem[] 格式化成结构化文本（供 LLM 理解） */
+  private formatWorkItemsPacket(items: WorkItem[]): string {
+    if (items.length === 0) return '（无工作项，请基于业务背景和用户要求生成通用框架）'
+    return items
+      .slice()
+      .sort((a, b) => new Date(b.date.start).getTime() - new Date(a.date.start).getTime())
+      .map((item, i) => {
+        const dateStr = item.date.end && item.date.end !== item.date.start
+          ? `${item.date.start} ~ ${item.date.end}`
+          : item.date.start
+        const metrics = item.metrics?.length
+          ? `\n  数据成果：${item.metrics.map(m => `${m.label}=${m.value}`).join('；')}`
+          : ''
+        const tags = item.tags?.length ? `\n  标签：${item.tags.join(', ')}` : ''
+        const category = item.category ? `【${item.category}】 ` : ''
+        return `### ${i + 1}. ${category}${item.title}
+  时间：${dateStr}
+  描述：${item.description}${metrics}${tags}`
+      })
+      .join('\n\n')
+  }
+
   /** 构建全年概览指标提取提示词（分段生成 - 第一步） */
   buildOverviewMetricsPrompt(fullContent: string): ChatMessage[] {
     return [

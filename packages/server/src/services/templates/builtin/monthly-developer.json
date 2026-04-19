@@ -1,0 +1,15 @@
+{
+  "id": "monthly-developer",
+  "name": "月报 · 研发版",
+  "period": "monthly",
+  "appliesTo": ["developer"],
+  "pptTemplate": "monthly",
+  "builtin": true,
+  "sections": [
+    { "key": "delivered", "title": "本月交付", "required": true, "hint": "列出本月上线的功能/需求/重构，标注影响模块、涉及技术栈、交付质量（缺陷数、测试覆盖率等）" },
+    { "key": "performance", "title": "性能与质量", "required": true, "hint": "本月在性能优化、稳定性、代码质量方面的量化成果（如：首屏加载 -300ms、线上故障 0 起、PR 数 xx）" },
+    { "key": "technical", "title": "技术沉淀", "required": false, "hint": "本月做的架构调整、中间件/工具封装、技术分享；写出可复用的沉淀而非一次性工作" },
+    { "key": "nextMonth", "title": "下月规划", "required": true, "hint": "3 条按优先级排序的研发目标，关注里程碑和技术债务处理" }
+  ],
+  "promptHints": "研发月报。用词要准确：模块名、接口名、技术栈名都要写对。数据要真实可验证（来自 Git/CI/监控）。避免堆砌提交数这种表面指标，要讲清楚带来了什么业务或技术价值。"
+}

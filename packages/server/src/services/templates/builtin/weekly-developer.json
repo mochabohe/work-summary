@@ -1,0 +1,15 @@
+{
+  "id": "weekly-developer",
+  "name": "周报 · 研发版",
+  "period": "weekly",
+  "appliesTo": ["developer"],
+  "pptTemplate": "weekly",
+  "builtin": true,
+  "sections": [
+    { "key": "completed", "title": "本周完成", "required": true, "hint": "列出完成的需求/功能/Bug 修复，标注涉及的模块；有数据成果（性能、覆盖率等）的要量化" },
+    { "key": "inProgress", "title": "进行中", "required": false, "hint": "在研需求或重构事项，标注当前进度和预计完成时间" },
+    { "key": "issues", "title": "技术难点/卡点", "required": false, "hint": "技术层面的难题或阻塞（环境、依赖、架构决策），说明解决思路或求助点" },
+    { "key": "nextWeek", "title": "下周计划", "required": true, "hint": "按优先级列出下周的研发事项，优先关注里程碑和交付点" }
+  ],
+  "promptHints": "面向研发团队的周报。读者是技术负责人。用词要准确（使用模块名/接口名/技术栈名），避免空洞形容词。Git 提交数据可作为背景，但不要直接堆到正文里。"
+}

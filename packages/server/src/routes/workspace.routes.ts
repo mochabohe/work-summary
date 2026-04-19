@@ -3,10 +3,12 @@ import os from 'os'
 import path from 'path'
 import fs from 'fs/promises'
 import { v4 as uuidv4 } from 'uuid'
-import type { ApiResponse, WorkItem, ReportPeriod } from '@work-summary/shared'
+import type { ApiResponse, WorkItem, ReportPeriod, ReportPeriodType, AppMode, ReportTemplate } from '@work-summary/shared'
 import { ParserService } from '../services/parser/index.js'
 import { ExcelParser } from '../services/parser/excel-parser.js'
 import { WorkItemExtractor } from '../services/workspace/extractor.js'
+import { templateRegistry } from '../services/templates/registry.js'
+import { derivePeriodRange } from '../services/templates/filter.js'
 
 const SUPPORTED_TEXT_EXTS = ['.docx', '.pptx', '.pdf', '.md', '.txt', '.html', '.htm']
 
@@ -141,5 +143,33 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       .header('Content-Disposition', 'attachment; filename="work-items-template.xlsx"')
       .send(buffer)
+  })
+
+  /**
+   * 列出报告模板（按模式 + 周期过滤）
+   */
+  app.get<{
+    Querystring: { mode?: AppMode; period?: ReportPeriodType }
+  }>('/templates', async (request, reply) => {
+    const { mode, period } = request.query
+    const list = templateRegistry.listByMatch(mode, period)
+    const response: ApiResponse<ReportTemplate[]> = { success: true, data: list }
+    return reply.send(response)
+  })
+
+  /**
+   * 推导周期默认日期范围
+   */
+  app.get<{
+    Querystring: { type: ReportPeriodType; anchor?: string }
+  }>('/period-range', async (request, reply) => {
+    const { type, anchor } = request.query
+    const anchorDate = anchor ? new Date(anchor) : new Date()
+    const range = derivePeriodRange(type, anchorDate)
+    const response: ApiResponse<{ type: ReportPeriodType } & typeof range> = {
+      success: true,
+      data: { type, ...range },
+    }
+    return reply.send(response)
   })
 }

@@ -1,0 +1,16 @@
+{
+  "id": "yearly-developer",
+  "name": "年报 · 研发版",
+  "period": "yearly",
+  "appliesTo": ["developer"],
+  "pptTemplate": "yearly",
+  "builtin": true,
+  "sections": [
+    { "key": "overview", "title": "年度总览", "required": true, "hint": "用 3-5 句话回答：今年我在技术/业务上最主要的贡献是什么？影响了多少业务/多少同事" },
+    { "key": "keyProjects", "title": "重点项目", "required": true, "hint": "3-5 个最重要的项目，按 STAR 法则：情境（业务痛点/技术挑战）-任务（你的职责）-行动（技术方案/攻坚过程）-结果（量化产出/业务收益/技术沉淀）" },
+    { "key": "techContribution", "title": "技术贡献", "required": true, "hint": "全年在架构设计、性能优化、稳定性、开发效率、技术标准方面的沉淀；要能被他人复用" },
+    { "key": "growth", "title": "个人成长", "required": false, "hint": "技术栈拓展、方法论升级、影响力（分享/评审/带人）；用具体事实而非形容词" },
+    { "key": "nextYear", "title": "来年规划", "required": true, "hint": "3 条围绕技术深度/广度/业务影响的年度目标，附关键里程碑" }
+  ],
+  "promptHints": "研发年报是展现技术深度和业务价值的关键材料，可能用于晋升/绩效。读者是技术负责人和跨部门高管。技术细节要准确，业务价值要讲得通；既要有深度（架构思考）也要有广度（业务结果）。"
+}

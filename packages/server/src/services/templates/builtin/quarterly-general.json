@@ -1,0 +1,15 @@
+{
+  "id": "quarterly-general",
+  "name": "季报 · 通用版",
+  "period": "quarterly",
+  "appliesTo": ["general"],
+  "pptTemplate": "quarterly",
+  "builtin": true,
+  "sections": [
+    { "key": "okrReview", "title": "季度目标回顾", "required": true, "hint": "对照季初 OKR 逐条回顾达成情况（达成/未达成/超预期），标注完成度百分比和主要证据" },
+    { "key": "keyOutputs", "title": "关键产出", "required": true, "hint": "3-5 个本季最值得被看见的项目或成果，按影响力排序，每条写 '项目背景 + 你的贡献 + 业务结果'" },
+    { "key": "metrics", "title": "数据成果", "required": true, "hint": "本季核心业务/运营指标的同比/环比变化，突出你主导或参与推动的指标" },
+    { "key": "nextQuarter", "title": "下季度规划", "required": true, "hint": "下季度 3 条 OKR（Objective + Key Results），对齐部门战略，明确资源需求" }
+  ],
+  "promptHints": "季报读者通常是部门负责人或更高层。强调战略对齐、业务结果、可复用的方法论。避免事务性流水账，每一条都要回答 '为什么重要' 而不只是 '做了什么'。"
+}
