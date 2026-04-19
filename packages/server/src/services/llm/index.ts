@@ -146,7 +146,15 @@ export class LLMService {
       if (response && response.choices) {
         return { valid: true }
       }
-      return { valid: false, error: '响应结构异常，未返回 choices' }
+      // 返回 200 但没有 choices 字段：多半 baseURL 命中了代理的其他路径（如主页或错误页）
+      const baseURL = currentConfig.baseURL ?? ''
+      const urlHint = baseURL && !/\/v\d+\/?$/.test(baseURL.replace(/\/$/, ''))
+        ? `（baseURL "${baseURL}" 未以 /v1 结尾，尝试改为 "${baseURL.replace(/\/$/, '')}/v1" 后重试）`
+        : ''
+      return {
+        valid: false,
+        error: `接口返回 200 但响应结构不含 choices 字段，baseURL 可能命中了代理的其他路径${urlHint}`,
+      }
     } catch (err: unknown) {
       // OpenAI SDK APIError 包含 status + message
       if (err instanceof OpenAI.APIError) {
