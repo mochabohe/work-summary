@@ -78,20 +78,66 @@
     </div>
 
     <!-- 拉取模型列表（自定义或想确认其他 provider 时） -->
-    <div class="model-actions">
-      <el-button
-        size="small"
-        :loading="loadingModels"
-        @click="loadModels"
-        :disabled="!canLoadModels"
-      >
-        <el-icon><RefreshRight /></el-icon>
-        拉取模型列表
-      </el-button>
-      <el-button size="small" :loading="modelTesting" @click="testModel">测试连接</el-button>
-      <el-button size="small" type="primary" :loading="modelSaving" @click="saveModel">保存</el-button>
-      <span v-if="modelTestResult === 'ok' && !modelReply" class="ok">✓ 连接正常</span>
+    <!-- 步骤引导式操作区 -->
+    <div class="step-flow">
+      <!-- 步骤 1：拉取模型列表 -->
+      <div class="step" :class="{ active: activeStep === 1, done: loadedModels.length > 0 }">
+        <div class="step-num">{{ loadedModels.length > 0 ? '✓' : '1' }}</div>
+        <div class="step-body">
+          <div class="step-title">拉取模型列表</div>
+          <el-button
+            size="small"
+            :type="activeStep === 1 ? 'primary' : ''"
+            :loading="loadingModels"
+            :disabled="!canLoadModels"
+            @click="loadModels"
+          >
+            <el-icon><RefreshRight /></el-icon>
+            {{ loadedModels.length > 0 ? '重新拉取' : '拉取' }}
+          </el-button>
+          <span v-if="loadedModels.length > 0" class="step-done-hint">已加载 {{ loadedModels.length }} 个模型</span>
+        </div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <!-- 步骤 2：测试连接 -->
+      <div class="step" :class="{ active: activeStep === 2, done: modelTestResult === 'ok' }">
+        <div class="step-num">{{ modelTestResult === 'ok' ? '✓' : '2' }}</div>
+        <div class="step-body">
+          <div class="step-title">测试连接</div>
+          <el-button
+            size="small"
+            :type="activeStep === 2 ? 'primary' : ''"
+            :loading="modelTesting"
+            :disabled="!modelApiKey || !modelId"
+            @click="testModel"
+          >
+            {{ modelTestResult === 'ok' ? '重新测试' : '测试' }}
+          </el-button>
+          <span v-if="modelTestResult === 'ok'" class="step-done-hint">已通过</span>
+        </div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <!-- 步骤 3：保存 -->
+      <div class="step" :class="{ active: activeStep === 3 }">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">保存配置</div>
+          <el-button
+            size="small"
+            type="primary"
+            :loading="modelSaving"
+            :disabled="!modelApiKey || !modelId"
+            @click="saveModel"
+          >保存</el-button>
+        </div>
+      </div>
     </div>
+
+    <div v-if="modelTestResult === 'ok' && !modelReply" class="ok step-feedback">✓ 连接正常</div>
 
     <!-- 错误详情：完整可滚动 -->
     <div v-if="modelTestResult && modelTestResult !== 'ok'" class="error-detail">
@@ -102,10 +148,7 @@
       <pre>{{ modelTestResult }}</pre>
     </div>
 
-    <!-- 已加载模型数量提示 -->
-    <div v-if="loadedModels.length > 0" class="loaded-tip">
-      ✓ 已加载 {{ loadedModels.length }} 个模型，从下拉选择即可
-    </div>
+    <!-- 已加载模型提示已移入步骤区，此处保留回复展示 -->
 
     <!-- 模型真实回复（会话测试） -->
     <div v-if="modelReply" class="chat-result">
@@ -121,7 +164,7 @@
         ⚠️ 注意：你请求的是「{{ requestedModel }}」，但代理实际返回的是「{{ modelUsed }}」——该代理可能进行了模型替换
       </div>
     </div>
-    <div class="tip">建议先「拉取模型列表」确认代理支持哪些模型，再选择并测试连接</div>
+    <div class="tip">按步骤操作：① 拉取代理支持的模型 → 选择模型 → ② 测试连接 → ③ 保存</div>
   </div>
 </template>
 
@@ -165,6 +208,14 @@ const baseURLHint = computed(() => {
   if (/\/v\d+\/?$/.test(url)) return ''
   if (url.endsWith('/')) return ''
   return `大多数 OpenAI 兼容代理需要以 /v1 结尾，建议改为 ${url.replace(/\/$/, '')}/v1`
+})
+
+/** 当前应进行到哪一步（用于高亮当前按钮） */
+const activeStep = computed(() => {
+  if (!modelApiKey.value) return 0              // 未填 Key：啥也别点
+  if (loadedModels.value.length === 0 && modelProvider.value === 'custom') return 1  // 自定义且未拉取 → 拉取
+  if (modelTestResult.value !== 'ok') return 2  // 未测试通过 → 测试
+  return 3                                       // 已测试 → 保存
 })
 
 /** 根据模型名推荐 API 类型 */
@@ -413,6 +464,100 @@ async function saveModel() {
   font-size: 11px;
   color: #fbbf24;
   margin-left: 4px;
+}
+
+/* ==== 步骤引导 ==== */
+.step-flow {
+  margin-top: 14px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.step {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  min-width: 0;
+}
+
+.step.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(167, 139, 250, 0.08));
+  border-color: rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+}
+
+.step.done {
+  background: rgba(52, 211, 153, 0.05);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.step.active .step-num {
+  background: linear-gradient(135deg, #667eea, #a78bfa);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.4);
+}
+
+.step.done .step-num {
+  background: #34d399;
+  color: #0f0c29;
+}
+
+.step-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.step-title {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.step.active .step-title {
+  color: #fff;
+}
+
+.step-done-hint {
+  font-size: 10px;
+  color: #34d399;
+  margin-top: 2px;
+}
+
+.step-arrow {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.step-feedback {
+  margin-top: 10px;
+  font-size: 12px;
 }
 
 /* ==== 错误详情 ==== */
