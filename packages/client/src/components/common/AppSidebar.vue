@@ -65,7 +65,7 @@
     <el-dialog
       v-model="modelDialogVisible"
       title="切换 AI 模型（不配置则用默认 DeepSeek）"
-      width="560px"
+      width="720px"
       align-center
     >
       <ModelConfigPanel />

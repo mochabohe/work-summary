@@ -366,13 +366,15 @@ async function saveModel() {
 
 .default-hint {
   margin-bottom: 12px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   background: rgba(167, 139, 250, 0.06);
   border: 1px dashed rgba(167, 139, 250, 0.3);
   border-radius: 8px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.7;
+  white-space: nowrap;
+  overflow-x: auto;
 }
 .default-hint strong {
   color: #a78bfa;
