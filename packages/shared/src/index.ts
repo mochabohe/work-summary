@@ -142,6 +142,12 @@ export interface ModelConfig {
   apiKey: string
   baseURL?: string   // OpenAI 兼容时使用
   model: string
+  /**
+   * OpenAI 兼容模式下的 API 类型：
+   * - chat（默认）：标准 /v1/chat/completions，适用 gpt-4o / deepseek-chat 等普通模型
+   * - responses：/v1/responses，适用 reasoning 模型（gpt-5 / o1 / o3 等）
+   */
+  apiType?: 'chat' | 'responses'
 }
 
 // ============================

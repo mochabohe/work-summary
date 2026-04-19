@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { DEEPSEEK_CONFIG } from '@work-summary/shared'
 import type { ModelConfig } from '@work-summary/shared'
 import { AnthropicClient } from './anthropic-client.js'
+import { OpenAIResponsesClient, ResponsesAPIError } from './responses-client.js'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -57,10 +58,47 @@ export class LLMService {
     return new AnthropicClient(currentConfig.apiKey, currentConfig.model)
   }
 
+  private getResponsesClient(): OpenAIResponsesClient {
+    return new OpenAIResponsesClient(
+      currentConfig.baseURL ?? '',
+      currentConfig.apiKey,
+      currentConfig.model,
+    )
+  }
+
+  private isResponsesMode(): boolean {
+    return currentConfig.provider === 'openai-compatible' && currentConfig.apiType === 'responses'
+  }
+
   async *streamChat(messages: ChatMessage[], _model?: string, maxTokens?: number): AsyncGenerator<string> {
     if (currentConfig.provider === 'anthropic') {
       yield* this.getAnthropicClient().streamChat(messages, maxTokens)
       return
+    }
+
+    // Responses API 路径（适用 reasoning 模型 / 代理把模型路由到 /v1/responses）
+    if (this.isResponsesMode()) {
+      let lastError: unknown
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          yield* this.getResponsesClient().streamChat(messages, maxTokens)
+          return
+        } catch (err) {
+          lastError = err
+          const msg = (err as Error).message?.toLowerCase() ?? ''
+          const retriable = err instanceof ResponsesAPIError
+            && (err.status === 429 || (err.status >= 500 && err.status < 600))
+          const networkErr = msg.includes('fetch failed') || msg.includes('econnreset') || msg.includes('etimedout')
+          if (attempt < MAX_RETRIES && (retriable || networkErr)) {
+            const delay = BASE_DELAY_MS * Math.pow(2, attempt)
+            console.warn(`[LLM] Responses streamChat 第 ${attempt + 1} 次失败，${delay / 1000}s 后重试:`, (err as Error).message)
+            await sleep(delay)
+            continue
+          }
+          throw err
+        }
+      }
+      throw lastError
     }
 
     let lastError: unknown
@@ -94,6 +132,10 @@ export class LLMService {
   async chat(messages: ChatMessage[], _model?: string): Promise<string> {
     if (currentConfig.provider === 'anthropic') {
       return this.getAnthropicClient().chat(messages)
+    }
+    if (this.isResponsesMode()) {
+      const result = await this.getResponsesClient().chat(messages)
+      return result.text
     }
 
     let lastError: unknown
@@ -137,6 +179,42 @@ export class LLMService {
         const ok = await this.getAnthropicClient().validate()
         return { valid: ok, error: ok ? undefined : 'Anthropic 验证失败' }
       }
+
+      // Responses API 路径
+      if (this.isResponsesMode()) {
+        try {
+          const result = await this.getResponsesClient().chat([
+            { role: 'system', content: '你是一个测试助手。用一句话（不超过 30 字）回复用户，证明你在工作。' },
+            { role: 'user', content: '请简短介绍你自己，并告诉我你是什么模型。' },
+          ])
+          if (result.text && result.text.trim()) {
+            return { valid: true, reply: result.text.trim(), modelUsed: result.modelUsed }
+          }
+          // 文本为空但请求成功
+          const previewRaw = (() => {
+            try {
+              const s = JSON.stringify(result.raw)
+              return s.length > 300 ? s.slice(0, 300) + '...' : s
+            } catch { return String(result.raw) }
+          })()
+          return {
+            valid: false,
+            error: `Responses API 返回但提取不到文本（output 结构不标准）。响应：${previewRaw}`,
+          }
+        } catch (err) {
+          if (err instanceof ResponsesAPIError) {
+            const status = err.status
+            const hint = status === 401 ? 'API Key 无效或过期'
+              : status === 404 ? `路径错误（确认 baseURL 含 /v1，且代理支持 /v1/responses 端点）`
+              : status === 403 ? '权限不足或未开通 Responses API'
+              : status === 429 ? '请求过频'
+              : `HTTP ${status}`
+            return { valid: false, error: `${hint}：${err.message.slice(0, 200)}` }
+          }
+          throw err
+        }
+      }
+
       const response = await this.getOpenAIClient().chat.completions.create({
         model: currentConfig.model,
         messages: [

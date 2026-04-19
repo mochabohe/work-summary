@@ -57,6 +57,23 @@
       style="margin-top:8px;"
     />
 
+    <!-- API 类型选择（仅 OpenAI 兼容模式） -->
+    <div v-if="modelProvider !== 'anthropic'" class="api-type-row">
+      <span class="api-type-label">API 类型：</span>
+      <el-radio-group v-model="apiType" size="small">
+        <el-radio-button value="chat">Chat Completions</el-radio-button>
+        <el-radio-button value="responses">Responses API</el-radio-button>
+      </el-radio-group>
+      <el-tooltip
+        :content="apiType === 'responses'
+          ? '/v1/responses 端点，适用 reasoning 模型（gpt-5 / o1 / o3）'
+          : '/v1/chat/completions 端点，适用 gpt-4o / deepseek-chat 等普通模型'"
+        placement="top"
+      >
+        <el-icon class="hint-icon"><InfoFilled /></el-icon>
+      </el-tooltip>
+    </div>
+
     <!-- 拉取模型列表（自定义或想确认其他 provider 时） -->
     <div class="model-actions">
       <el-button
@@ -101,7 +118,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { RefreshRight } from '@element-plus/icons-vue'
+import { RefreshRight, InfoFilled } from '@element-plus/icons-vue'
 import api from '@/api/index'
 import type { ApiResponse } from '@work-summary/shared'
 
@@ -109,6 +126,7 @@ const modelProvider = ref<'deepseek' | 'openai' | 'custom' | 'anthropic'>('deeps
 const modelId = ref('deepseek-chat')
 const modelBaseURL = ref('')
 const modelApiKey = ref('')
+const apiType = ref<'chat' | 'responses'>('chat')
 const modelTesting = ref(false)
 const modelTestResult = ref('')
 const modelReply = ref('')
@@ -196,6 +214,7 @@ async function testModel() {
     const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
     const res = await api.post('/config/model', {
       provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
+      apiType: provider === 'openai-compatible' ? apiType.value : undefined,
     }) as unknown as ApiResponse<{ valid: boolean; reply?: string; modelUsed?: string }>
     if (res.data?.valid) {
       modelTestResult.value = 'ok'
@@ -216,7 +235,10 @@ async function saveModel() {
   const provider = modelProvider.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
   const baseURL = modelProvider.value === 'custom' ? modelBaseURL.value : providerBaseURLMap[modelProvider.value]
   try {
-    await api.post('/config/model', { provider, apiKey: modelApiKey.value, baseURL, model: modelId.value })
+    await api.post('/config/model', {
+      provider, apiKey: modelApiKey.value, baseURL, model: modelId.value,
+      apiType: provider === 'openai-compatible' ? apiType.value : undefined,
+    })
     ElMessage.success('模型配置已保存')
     modelTestResult.value = 'ok'
   } catch (e: any) {
@@ -314,4 +336,23 @@ async function saveModel() {
   color: #34d399;
   line-height: 1.6;
 }
+
+.api-type-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-type-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.hint-icon {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: help;
+}
+.hint-icon:hover { color: #a78bfa; }
 </style>
