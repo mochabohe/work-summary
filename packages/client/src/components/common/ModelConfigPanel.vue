@@ -1,42 +1,12 @@
 <template>
   <div class="model-config-panel">
     <div class="model-provider-row">
-      <el-select v-model="modelProvider" size="small" style="width:160px;" @change="onProviderChange">
+      <el-select v-model="modelProvider" size="small" style="width:100%;" @change="onProviderChange">
         <el-option value="deepseek" label="DeepSeek（默认）" />
         <el-option value="openai" label="OpenAI" />
         <el-option value="custom" label="自定义（OpenAI 兼容）" />
         <el-option value="anthropic" label="Claude（Anthropic）" />
       </el-select>
-      <!-- 已加载模型列表：显示下拉 -->
-      <el-select
-        v-if="loadedModels.length > 0"
-        v-model="modelId"
-        size="small"
-        style="width:200px;"
-        filterable
-        placeholder="选择模型"
-      >
-        <el-option
-          v-for="m in loadedModels"
-          :key="m.id"
-          :value="m.id"
-          :label="m.id"
-        >
-          <span>{{ m.id }}</span>
-          <span v-if="m.ownedBy" class="owned-by">{{ m.ownedBy }}</span>
-        </el-option>
-      </el-select>
-      <!-- 未加载：内置预设下拉 -->
-      <el-select
-        v-else-if="modelProvider !== 'custom'"
-        v-model="modelId"
-        size="small"
-        style="width:200px;"
-      >
-        <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m" />
-      </el-select>
-      <!-- 自定义且未加载：手填 -->
-      <el-input v-else v-model="modelId" size="small" placeholder="模型 ID 或先点拉取" style="width:200px;" />
     </div>
     <el-input
       v-if="modelProvider === 'custom'"
@@ -77,14 +47,13 @@
       </span>
     </div>
 
-    <!-- 拉取模型列表（自定义或想确认其他 provider 时） -->
-    <!-- 步骤引导式操作区 -->
+    <!-- 步骤引导式操作区（4 步：拉取 → 选择 → 测试 → 保存） -->
     <div class="step-flow">
       <!-- 步骤 1：拉取模型列表 -->
       <div class="step" :class="{ active: activeStep === 1, done: loadedModels.length > 0 }">
         <div class="step-num">{{ loadedModels.length > 0 ? '✓' : '1' }}</div>
         <div class="step-body">
-          <div class="step-title">拉取模型列表</div>
+          <div class="step-title">拉取模型</div>
           <el-button
             size="small"
             :type="activeStep === 1 ? 'primary' : ''"
@@ -95,35 +64,77 @@
             <el-icon><RefreshRight /></el-icon>
             {{ loadedModels.length > 0 ? '重新拉取' : '拉取' }}
           </el-button>
-          <span v-if="loadedModels.length > 0" class="step-done-hint">已加载 {{ loadedModels.length }} 个模型</span>
+          <span v-if="loadedModels.length > 0" class="step-done-hint">✓ {{ loadedModels.length }} 个</span>
         </div>
       </div>
 
       <div class="step-arrow">→</div>
 
-      <!-- 步骤 2：测试连接 -->
-      <div class="step" :class="{ active: activeStep === 2, done: modelTestResult === 'ok' }">
-        <div class="step-num">{{ modelTestResult === 'ok' ? '✓' : '2' }}</div>
+      <!-- 步骤 2：选择模型 -->
+      <div class="step step-select" :class="{ active: activeStep === 2, done: !!modelId }">
+        <div class="step-num">{{ modelId ? '✓' : '2' }}</div>
+        <div class="step-body">
+          <div class="step-title">选择模型</div>
+          <el-select
+            v-if="loadedModels.length > 0"
+            v-model="modelId"
+            size="small"
+            style="width: 100%;"
+            filterable
+            placeholder="从下拉选择"
+          >
+            <el-option
+              v-for="m in loadedModels"
+              :key="m.id"
+              :value="m.id"
+              :label="m.id"
+            >
+              <span>{{ m.id }}</span>
+              <span v-if="m.ownedBy" class="owned-by">{{ m.ownedBy }}</span>
+            </el-option>
+          </el-select>
+          <el-select
+            v-else-if="modelProvider !== 'custom'"
+            v-model="modelId"
+            size="small"
+            style="width: 100%;"
+          >
+            <el-option v-for="m in modelPresets[modelProvider]" :key="m" :value="m" :label="m" />
+          </el-select>
+          <el-input
+            v-else
+            v-model="modelId"
+            size="small"
+            placeholder="先拉取或手填"
+          />
+        </div>
+      </div>
+
+      <div class="step-arrow">→</div>
+
+      <!-- 步骤 3：测试连接 -->
+      <div class="step" :class="{ active: activeStep === 3, done: modelTestResult === 'ok' }">
+        <div class="step-num">{{ modelTestResult === 'ok' ? '✓' : '3' }}</div>
         <div class="step-body">
           <div class="step-title">测试连接</div>
           <el-button
             size="small"
-            :type="activeStep === 2 ? 'primary' : ''"
+            :type="activeStep === 3 ? 'primary' : ''"
             :loading="modelTesting"
             :disabled="!modelApiKey || !modelId"
             @click="testModel"
           >
             {{ modelTestResult === 'ok' ? '重新测试' : '测试' }}
           </el-button>
-          <span v-if="modelTestResult === 'ok'" class="step-done-hint">已通过</span>
+          <span v-if="modelTestResult === 'ok'" class="step-done-hint">✓ 已通过</span>
         </div>
       </div>
 
       <div class="step-arrow">→</div>
 
-      <!-- 步骤 3：保存 -->
-      <div class="step" :class="{ active: activeStep === 3 }">
-        <div class="step-num">3</div>
+      <!-- 步骤 4：保存 -->
+      <div class="step" :class="{ active: activeStep === 4 }">
+        <div class="step-num">4</div>
         <div class="step-body">
           <div class="step-title">保存配置</div>
           <el-button
@@ -164,7 +175,7 @@
         ⚠️ 注意：你请求的是「{{ requestedModel }}」，但代理实际返回的是「{{ modelUsed }}」——该代理可能进行了模型替换
       </div>
     </div>
-    <div class="tip">按步骤操作：① 拉取代理支持的模型 → 选择模型 → ② 测试连接 → ③ 保存</div>
+    <div class="tip">按步骤操作：① 拉取 → ② 选择模型 → ③ 测试 → ④ 保存</div>
   </div>
 </template>
 
@@ -210,12 +221,17 @@ const baseURLHint = computed(() => {
   return `大多数 OpenAI 兼容代理需要以 /v1 结尾，建议改为 ${url.replace(/\/$/, '')}/v1`
 })
 
-/** 当前应进行到哪一步（用于高亮当前按钮） */
+/** 当前应进行到哪一步（4 步：拉取/选择/测试/保存） */
 const activeStep = computed(() => {
-  if (!modelApiKey.value) return 0              // 未填 Key：啥也别点
-  if (loadedModels.value.length === 0 && modelProvider.value === 'custom') return 1  // 自定义且未拉取 → 拉取
-  if (modelTestResult.value !== 'ok') return 2  // 未测试通过 → 测试
-  return 3                                       // 已测试 → 保存
+  if (!modelApiKey.value) return 0
+  // 自定义且未拉取 → ① 拉取
+  if (loadedModels.value.length === 0 && modelProvider.value === 'custom') return 1
+  // 未选模型 → ② 选择
+  if (!modelId.value) return 2
+  // 未测试 → ③ 测试
+  if (modelTestResult.value !== 'ok') return 3
+  // 已测试 → ④ 保存
+  return 4
 })
 
 /** 根据模型名推荐 API 类型 */
@@ -484,6 +500,10 @@ async function saveModel() {
   border-radius: 10px;
   transition: all 0.3s ease;
   min-width: 0;
+}
+
+.step.step-select {
+  flex: 1.6;  /* 选择模型卡片更宽，容纳下拉 */
 }
 
 .step.active {
