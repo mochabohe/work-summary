@@ -30,12 +30,13 @@ function sleep(ms: number): Promise<void> {
 const MAX_RETRIES = 2
 const BASE_DELAY_MS = 2000
 
-// 全局当前模型配置（可通过 setConfig 修改）
+// 全局当前模型配置
+// 启动时为空配置，真实值由 bootstrapDefaultProfiles() 从 .env 读取并设置。
 let currentConfig: ModelConfig = {
   provider: 'openai-compatible',
-  apiKey: process.env.DEEPSEEK_API_KEY || '',
-  baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
-  model: DEEPSEEK_CONFIG.defaultModel,
+  apiKey: '',
+  baseURL: '',
+  model: '',
 }
 
 export interface SavedModelOption {
@@ -136,6 +137,70 @@ export function getProfileModelOptions(): SavedModelOption[] {
 
 export function canQuickSwitchModels(): boolean {
   return savedModelProfiles.length > 0
+}
+
+/**
+ * 从 .env 读取 MODEL_GPT_* / MODEL_CLAUDE_* 两组默认 profile，
+ * 注册到 savedModelProfiles 并把第一组设为当前 currentConfig。
+ * 任一组 key/baseURL(openai)/model 缺失即跳过。
+ * 两组都没配时，回退到 DEEPSEEK_API_KEY（兼容旧 .env）。
+ *
+ * 必须在 dotenv.config() 之后调用。
+ */
+export function bootstrapDefaultProfiles(): void {
+  const readEnvProfile = (prefix: 'GPT' | 'CLAUDE'): ModelConfig | null => {
+    const provider = process.env[`MODEL_${prefix}_PROVIDER`] as ModelConfig['provider'] | undefined
+    const apiKey = process.env[`MODEL_${prefix}_API_KEY`]
+    const baseURL = process.env[`MODEL_${prefix}_BASE_URL`]
+    const model = process.env[`MODEL_${prefix}_NAME`]
+    const apiType = process.env[`MODEL_${prefix}_API_TYPE`] as ModelConfig['apiType'] | undefined
+
+    if (!provider || !apiKey || !model) return null
+    if (provider === 'openai-compatible' && !baseURL) return null
+    if (provider !== 'openai-compatible' && provider !== 'anthropic') return null
+
+    return {
+      provider,
+      apiKey,
+      baseURL: baseURL || undefined,
+      model,
+      ...(apiType ? { apiType } : {}),
+    }
+  }
+
+  const registered: ModelConfig[] = []
+
+  const gpt = readEnvProfile('GPT')
+  if (gpt) {
+    saveModelProfile(gpt, [{ id: gpt.model, ownedBy: gpt.provider }])
+    registered.push(gpt)
+  }
+
+  const claude = readEnvProfile('CLAUDE')
+  if (claude) {
+    saveModelProfile(claude, [{ id: claude.model, ownedBy: claude.provider }])
+    registered.push(claude)
+  }
+
+  // 兜底：两组都没配时回退 DEEPSEEK_API_KEY
+  if (registered.length === 0 && process.env.DEEPSEEK_API_KEY) {
+    const deepseek: ModelConfig = {
+      provider: 'openai-compatible',
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL || DEEPSEEK_CONFIG.baseURL,
+      model: DEEPSEEK_CONFIG.defaultModel,
+    }
+    saveModelProfile(deepseek, [{ id: deepseek.model, ownedBy: deepseek.provider }])
+    registered.push(deepseek)
+  }
+
+  if (registered.length > 0) {
+    currentConfig = registered[0]
+    const names = registered.map(p => p.model).join(', ')
+    console.log(`[LLM] 已加载默认 profile: ${names}（当前激活: ${currentConfig.model}）`)
+  } else {
+    console.warn('[LLM] 未配置任何默认模型 profile，请在 .env 填写 MODEL_GPT_* / MODEL_CLAUDE_* 或 DEEPSEEK_API_KEY')
+  }
 }
 
 export function switchToSavedModel(model: string, apiType?: ModelConfig['apiType']): ModelConfig | null {

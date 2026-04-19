@@ -1,7 +1,7 @@
 <template>
   <div class="model-config-panel">
     <div class="default-hint">
-      💡 后端预置 <strong>DeepSeek</strong> 作为默认模型，无需配置即可使用。下方仅在你想<strong>切换其他模型</strong>时填写。
+      💡 后端已预置 <strong>gpt-5.4</strong> 作为默认模型，可直接使用。下方仅在你想<strong>切换其他模型</strong>时填写。
     </div>
 
     <div class="model-provider-row">

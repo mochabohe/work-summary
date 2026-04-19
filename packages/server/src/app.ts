@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
+import { bootstrapDefaultProfiles } from './services/llm/index.js'
 import { scanRoutes } from './routes/scan.routes.js'
 import { analysisRoutes } from './routes/analysis.routes.js'
 import { generateRoutes } from './routes/generate.routes.js'
@@ -11,6 +12,9 @@ import { historyRoutes } from './routes/history.routes.js'
 import { workspaceRoutes } from './routes/workspace.routes.js'
 
 export async function createApp() {
+  // 从 .env 读取默认 profile（MODEL_GPT_* / MODEL_CLAUDE_* / DEEPSEEK_API_KEY）
+  bootstrapDefaultProfiles()
+
   const app = Fastify({
     bodyLimit: 10 * 1024 * 1024,
     logger: true,
