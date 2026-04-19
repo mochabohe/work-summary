@@ -5,11 +5,13 @@ import type { DocumentContent } from '@work-summary/shared'
 import { DocxParser } from './docx-parser.js'
 import { PptxParser } from './pptx-parser.js'
 import { PdfParser } from './pdf-parser.js'
+import { XlsxParser } from './xlsx-parser.js'
 
 export class ParserService {
   private docxParser = new DocxParser()
   private pptxParser = new PptxParser()
   private pdfParser = new PdfParser()
+  private xlsxParser = new XlsxParser()
 
   /** 解析项目中的所有文档文件 */
   async parseDocuments(projectPath: string): Promise<DocumentContent[]> {
@@ -68,6 +70,13 @@ export class ParserService {
           filename,
           type: 'pdf',
           content: await this.pdfParser.parse(filePath),
+        }
+      case '.xlsx':
+      case '.xls':
+        return {
+          filename,
+          type: 'xlsx',
+          content: await this.xlsxParser.parse(filePath),
         }
       case '.md':
         return {

@@ -48,7 +48,7 @@
           <p class="mode-desc">手动录入或导入文档生成总结</p>
           <ul class="mode-features">
             <li>✓ 手动录入工作项</li>
-            <li>✓ Word/PDF/Excel 导入</li>
+            <li>✓ Word/PDF/PPT/Markdown 导入</li>
             <li>✓ 周报/月报/季报/年报模板</li>
           </ul>
           <div class="mode-required">

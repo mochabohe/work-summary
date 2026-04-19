@@ -27,19 +27,3 @@ export async function extractItems(
   return { items: res.data?.items ?? [] }
 }
 
-/** Excel 批量导入 */
-export async function importExcel(file: File): Promise<{ items: WorkItem[]; skipped: number; errors: string[] }> {
-  const form = new FormData()
-  form.append('file', file)
-  const res = await api.post('/workspace/import-excel', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 60000,
-  }) as unknown as ApiResponse<{ items: WorkItem[]; skipped: number; errors: string[] }>
-  if (!res.success || !res.data) throw new Error(res.error || 'Excel 导入失败')
-  return res.data
-}
-
-/** 下载 Excel 模板 */
-export function getExcelTemplateUrl(): string {
-  return '/api/v1/workspace/excel-template'
-}

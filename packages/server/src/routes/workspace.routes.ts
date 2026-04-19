@@ -5,16 +5,14 @@ import fs from 'fs/promises'
 import { v4 as uuidv4 } from 'uuid'
 import type { ApiResponse, WorkItem, ReportPeriod, ReportPeriodType, AppMode, ReportTemplate } from '@work-summary/shared'
 import { ParserService } from '../services/parser/index.js'
-import { ExcelParser } from '../services/parser/excel-parser.js'
 import { WorkItemExtractor } from '../services/workspace/extractor.js'
 import { templateRegistry } from '../services/templates/registry.js'
 import { derivePeriodRange } from '../services/templates/filter.js'
 
-const SUPPORTED_TEXT_EXTS = ['.docx', '.pptx', '.pdf', '.md', '.txt', '.html', '.htm']
+const SUPPORTED_TEXT_EXTS = ['.docx', '.pptx', '.pdf', '.md', '.txt', '.html', '.htm', '.xlsx', '.xls']
 
 export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   const parser = new ParserService()
-  const excel = new ExcelParser()
   const extractor = new WorkItemExtractor()
 
   /**
@@ -99,50 +97,6 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         error: (err as Error).message,
       } as ApiResponse)
     }
-  })
-
-  /**
-   * Excel 批量导入 → WorkItem[]
-   */
-  app.post('/import-excel', async (request, reply) => {
-    const file = await request.file()
-    if (!file) {
-      return reply.status(400).send({ success: false, error: '未收到文件' } as ApiResponse)
-    }
-    const ext = path.extname(file.filename).toLowerCase()
-    if (!['.xlsx', '.xls'].includes(ext)) {
-      return reply.status(400).send({
-        success: false,
-        error: `仅支持 .xlsx / .xls 文件`,
-      } as ApiResponse)
-    }
-
-    try {
-      const buffer = await file.toBuffer()
-      const result = excel.parseBuffer(buffer)
-      const response: ApiResponse<{ items: WorkItem[]; skipped: number; errors: string[] }> = {
-        success: true,
-        data: result,
-      }
-      return reply.send(response)
-    } catch (err) {
-      app.log.error(err, 'workspace import-excel failed')
-      return reply.status(500).send({
-        success: false,
-        error: (err as Error).message,
-      } as ApiResponse)
-    }
-  })
-
-  /**
-   * 下载 Excel 模板
-   */
-  app.get('/excel-template', async (_request, reply) => {
-    const buffer = excel.generateTemplate()
-    reply
-      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      .header('Content-Disposition', 'attachment; filename="work-items-template.xlsx"')
-      .send(buffer)
   })
 
   /**

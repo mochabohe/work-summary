@@ -248,6 +248,8 @@ export const DOCUMENT_EXTENSIONS = [
   '.docx',
   '.pdf',
   '.pptx',
+  '.xlsx',
+  '.xls',
   '.txt',
   '.html',
   '.htm',

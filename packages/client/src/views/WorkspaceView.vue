@@ -132,10 +132,9 @@
       </div>
 
       <div class="empty-tips">
-        <h4>三种使用方式：</h4>
+        <h4>两种使用方式：</h4>
         <ul>
           <li><strong>文档导入</strong>：上传你写过的周报/月报，AI 自动结构化</li>
-          <li><strong>Excel 批量</strong>：下载模板填写后一次性导入</li>
           <li><strong>手动录入</strong>：边干边记，最贴近你的实际工作</li>
         </ul>
       </div>

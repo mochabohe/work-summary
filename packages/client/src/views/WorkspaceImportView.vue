@@ -13,7 +13,7 @@
         <div class="card-icon">📄</div>
         <h3>文档智能抽取</h3>
         <p>
-          上传周报、月报、会议纪要（Word / PDF / PPT / Markdown / TXT），
+          上传周报、月报、会议纪要（Word / PDF / PPT / Excel / Markdown / TXT），
           <br>
           AI 自动结构化为工作项
         </p>
@@ -21,7 +21,7 @@
           ref="docInputRef"
           type="file"
           multiple
-          accept=".docx,.pdf,.pptx,.md,.txt,.html,.htm"
+          accept=".docx,.pdf,.pptx,.xlsx,.xls,.md,.txt,.html,.htm"
           class="hidden-input"
           @change="handleDocSelect"
         >
@@ -35,33 +35,6 @@
           选择文档
         </el-button>
         <p class="card-hint">单文件 <= 20MB，支持多选文件</p>
-      </div>
-
-      <div class="upload-card">
-        <div class="card-icon">📊</div>
-        <h3>Excel 批量导入</h3>
-        <p>
-          按固定模板填写，一次性导入多条工作项，
-          <br>
-          无需 AI 解析，速度更快精度更高
-        </p>
-        <div class="card-actions">
-          <el-upload
-            :auto-upload="false"
-            :show-file-list="false"
-            accept=".xlsx,.xls"
-            :on-change="handleExcelUpload"
-          >
-            <el-button size="large" :loading="excelLoading">
-              <el-icon><Upload /></el-icon>
-              上传 Excel
-            </el-button>
-          </el-upload>
-          <el-button size="large" link type="primary" @click="downloadTemplate">
-            <el-icon><Download /></el-icon>
-            下载模板
-          </el-button>
-        </div>
       </div>
     </div>
 
@@ -148,12 +121,11 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft, Upload, Download, Loading, Warning, Edit, Delete,
+  ArrowLeft, Upload, Loading, Warning, Edit, Delete,
 } from '@element-plus/icons-vue'
-import type { UploadFile } from 'element-plus'
 import type { WorkItem } from '@work-summary/shared'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { parseDocument, extractItems, importExcel, getExcelTemplateUrl } from '@/api/workspace'
+import { parseDocument, extractItems } from '@/api/workspace'
 import WorkItemEditor from '@/components/workspace/WorkItemEditor.vue'
 
 const router = useRouter()
@@ -161,7 +133,6 @@ const store = useWorkspaceStore()
 
 const parsing = ref(false)
 const extracting = ref(false)
-const excelLoading = ref(false)
 const editingItem = ref<WorkItem | null>(null)
 const docInputRef = ref<HTMLInputElement | null>(null)
 const progressText = ref('')
@@ -239,36 +210,6 @@ async function handleDocSelect(event: Event) {
   }
 }
 
-async function handleExcelUpload(uploadFile: UploadFile) {
-  const file = uploadFile.raw
-  if (!file) return
-
-  excelLoading.value = true
-  try {
-    const res = await importExcel(file)
-    if (res.items.length === 0) {
-      ElMessage.warning('未从 Excel 中解析到有效工作项，标题为空的行会被跳过')
-      return
-    }
-
-    store.setDraft(res.items)
-    const msg = `识别 ${res.items.length} 条工作项${res.skipped > 0 ? `，跳过 ${res.skipped} 条` : ''}`
-    ElMessage.success(msg)
-
-    if (res.errors.length > 0) {
-      ElMessageBox.alert(res.errors.join('\n'), '部分行解析失败', { type: 'warning' })
-    }
-  } catch (err) {
-    ElMessage.error(`Excel 导入失败：${(err as Error).message}`)
-  } finally {
-    excelLoading.value = false
-  }
-}
-
-function downloadTemplate() {
-  window.open(getExcelTemplateUrl(), '_blank')
-}
-
 function confirmDraft() {
   const count = store.commitDraft()
   if (count > 0) {
@@ -311,9 +252,13 @@ function onEditorSave(item: WorkItem) {
 }
 
 .upload-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.upload-grid .upload-card {
+  max-width: 520px;
+  width: 100%;
 }
 
 .upload-card {
@@ -358,12 +303,6 @@ function onEditorSave(item: WorkItem) {
   color: var(--ws-text-muted, rgba(255, 255, 255, 0.4));
   margin-top: 10px;
   margin-bottom: 0;
-}
-
-.card-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
 }
 
 .extracting-box {
@@ -526,9 +465,4 @@ function onEditorSave(item: WorkItem) {
   margin-right: 4px;
 }
 
-@media (max-width: 700px) {
-  .upload-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
