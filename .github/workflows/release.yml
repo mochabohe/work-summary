@@ -44,9 +44,24 @@ jobs:
           find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete || true
           rm -rf packages/shared/dist packages/server/dist packages/client/dist packages/electron/dist
 
+      - name: Debug - check shared package state BEFORE build
+        shell: bash
+        run: |
+          echo "=== shared package.json exports field ==="
+          cat packages/shared/package.json
+          echo ""
+          echo "=== shared/dist/ (should be empty or not exist) ==="
+          ls -la packages/shared/dist/ 2>&1 || echo "(dist does not exist, expected)"
+          echo ""
+          echo "=== node_modules/@work-summary/shared symlink ==="
+          ls -la packages/server/node_modules/@work-summary/ 2>&1 || echo "(no server/node_modules/@work-summary)"
+          ls -la node_modules/@work-summary/ 2>&1 || echo "(no root/node_modules/@work-summary)"
+
       - name: Build shared / server / client
         run: |
           pnpm --filter @work-summary/shared build
+          echo "=== shared/dist/ AFTER shared build ==="
+          ls -la packages/shared/dist/
           pnpm --filter @work-summary/server build
           pnpm --filter @work-summary/client build
 
