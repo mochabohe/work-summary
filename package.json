@@ -10,6 +10,7 @@
     "build": "pnpm --filter @work-summary/shared build && pnpm --filter @work-summary/server build && pnpm --filter @work-summary/client build",
     "build:client": "pnpm --filter @work-summary/client build",
     "build:server": "pnpm --filter @work-summary/server build",
+    "dev:website": "pnpm --filter @work-summary/website dev",
     "electron:build": "bash scripts/build-electron.sh",
     "electron:dev": "pnpm build && pnpm --filter @work-summary/electron build && electron packages/electron/dist/main.js"
   },

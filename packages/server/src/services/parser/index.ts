@@ -6,12 +6,16 @@ import { DocxParser } from './docx-parser.js'
 import { PptxParser } from './pptx-parser.js'
 import { PdfParser } from './pdf-parser.js'
 import { XlsxParser } from './xlsx-parser.js'
+import { ImageParser } from './image-parser.js'
+
+const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']
 
 export class ParserService {
   private docxParser = new DocxParser()
   private pptxParser = new PptxParser()
   private pdfParser = new PdfParser()
   private xlsxParser = new XlsxParser()
+  private imageParser = new ImageParser()
 
   /** 解析项目中的所有文档文件 */
   async parseDocuments(projectPath: string): Promise<DocumentContent[]> {
@@ -98,6 +102,13 @@ export class ParserService {
           content: await this.extractTextFromHtmlAsync(await fs.readFile(filePath, 'utf-8')),
         }
       default:
+        if (IMAGE_EXTS.includes(ext)) {
+          return {
+            filename,
+            type: 'image',
+            content: await this.imageParser.parse(filePath),
+          }
+        }
         return null
     }
   }

@@ -26,7 +26,7 @@ export interface ProjectInfo {
 
 export interface DocumentContent {
   filename: string
-  type: 'docx' | 'pptx' | 'pdf' | 'md' | 'txt' | 'html'
+  type: 'docx' | 'pptx' | 'pdf' | 'xlsx' | 'image' | 'md' | 'txt' | 'html'
   content: string
 }
 

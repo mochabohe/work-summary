@@ -396,6 +396,48 @@ export class LLMService {
     throw lastError
   }
 
+  /**
+   * 多模态：传文本 + 图片，调用 vision 模型返回纯文本
+   * 当前仅 openai-compatible provider 走 chat.completions（vision 格式）
+   * anthropic 走 Messages API 的 image content block
+   */
+  async chatWithImage(prompt: string, imageBase64: string, mimeType: string): Promise<string> {
+    if (currentConfig.provider === 'anthropic') {
+      return this.getAnthropicClient().chatWithImage(prompt, imageBase64, mimeType)
+    }
+
+    const dataUrl = `data:${mimeType};base64,${imageBase64}`
+    const messages = [{
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: prompt },
+        { type: 'image_url' as const, image_url: { url: dataUrl } },
+      ],
+    }]
+
+    let lastError: unknown
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await this.getOpenAIClient().chat.completions.create({
+          model: currentConfig.model,
+          messages: messages as any,
+          max_tokens: 4096,
+        })
+        return response.choices[0]?.message?.content || ''
+      } catch (err) {
+        lastError = err
+        if (attempt < MAX_RETRIES && isRetriableError(err)) {
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt)
+          console.warn(`[LLM] chatWithImage 第 ${attempt + 1} 次失败，${delay / 1000}s 后重试:`, (err as Error).message)
+          await sleep(delay)
+          continue
+        }
+        throw err
+      }
+    }
+    throw lastError
+  }
+
   async validate(): Promise<boolean> {
     const result = await this.validateVerbose()
     return result.valid

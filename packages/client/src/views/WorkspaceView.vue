@@ -14,6 +14,22 @@
         </div>
       </div>
       <div class="ws-actions">
+        <el-popconfirm
+          v-if="store.totalCount > 0"
+          title="确认删除全部工作项？此操作不可恢复"
+          confirm-button-text="全部删除"
+          confirm-button-type="danger"
+          cancel-button-text="取消"
+          width="260"
+          @confirm="handleClearAll"
+        >
+          <template #reference>
+            <el-button>
+              <el-icon><Delete /></el-icon>
+              删除全部
+            </el-button>
+          </template>
+        </el-popconfirm>
         <el-button @click="$router.push('/workspace/import')">
           <el-icon><Upload /></el-icon>
           导入文档
@@ -153,6 +169,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import {
   Upload, Plus, Search, Edit, Delete, Calendar,
 } from '@element-plus/icons-vue'
@@ -167,6 +184,12 @@ const searchKeyword = ref('')
 const filterCategory = ref('')
 const dateRange = ref<'all' | 'month' | 'quarter'>('all')
 const editingItem = ref<WorkItem | null>(null)
+
+function handleClearAll() {
+  const count = store.totalCount
+  store.clearItems()
+  ElMessage.success(`已删除全部工作项（共 ${count} 条）`)
+}
 
 const filteredItems = computed(() => {
   let list = store.workItems

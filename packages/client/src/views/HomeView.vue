@@ -89,15 +89,11 @@ const router = useRouter()
 const appStore = useAppStore()
 
 const startButtonText = computed(() =>
-  appStore.isGeneral ? '进入工作空间' : '开始使用',
+  appStore.isGeneral ? '完善岗位信息' : '开始使用',
 )
 
 function onStart() {
-  if (appStore.isGeneral) {
-    router.push('/workspace')
-  } else {
-    router.push('/settings')
-  }
+  router.push('/settings')
 }
 
 const features = [

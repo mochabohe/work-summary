@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>智能工作总结 · 一键生成专业工作总结</title>
+  <meta name="description" content="输入工作文件夹路径，自动扫描项目代码与文档，结合 Git 贡献分析与 AI 智能总结，一键生成专业工作总结。支持 Markdown / Word / PDF / PPT 多格式导出。" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#eef4ff',100:'#dbe6ff',500:'#4f6bff',600:'#3a52ea',700:'#2e3fc2' },
+            ink:   { 900:'#0b1020', 700:'#1f2544', 500:'#475079', 300:'#8a92b8' }
+          },
+          fontFamily: {
+            sans: ['"PingFang SC"','"Microsoft YaHei"','system-ui','-apple-system','"Segoe UI"','sans-serif']
+          },
+          boxShadow: {
+            glow: '0 20px 60px -15px rgba(79,107,255,0.55)',
+            card: '0 10px 30px -12px rgba(15,23,42,0.15)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'PingFang SC','Microsoft YaHei',system-ui,sans-serif; }
+    .hero-grid {
+      background-image:
+        linear-gradient(rgba(79,107,255,.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(79,107,255,.12) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse at center, black 35%, transparent 75%);
+    }
+    .orb {
+      position:absolute; border-radius:9999px; filter: blur(60px); opacity:.55; pointer-events:none;
+    }
+    .gradient-text {
+      background: linear-gradient(90deg,#4f6bff 0%,#8b5cf6 50%,#ec4899 100%);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+  </style>
+</head>
+<body class="bg-white text-ink-900 antialiased">
+
+  <!-- 顶部导航 -->
+  <header class="fixed inset-x-0 top-0 z-40 backdrop-blur bg-white/75 border-b border-slate-200/60">
+    <div class="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-2 font-semibold">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-purple-500 text-white">✨</span>
+        <span>智能工作总结</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-8 text-sm text-ink-500">
+        <a href="#features" class="hover:text-ink-900">功能特性</a>
+        <a href="#screenshots" class="hover:text-ink-900">产品演示</a>
+        <a href="#download" class="hover:text-ink-900">下载</a>
+      </nav>
+      <a href="#download" class="inline-flex items-center gap-1 rounded-full bg-ink-900 text-white text-sm px-4 py-2 hover:bg-ink-700 transition">
+        立即下载 <span>↓</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden pt-32 pb-24">
+    <div class="absolute inset-0 hero-grid"></div>
+    <div class="orb bg-brand-500 w-[420px] h-[420px] -top-32 -left-24"></div>
+    <div class="orb bg-purple-500 w-[380px] h-[380px] top-10 right-[-100px]"></div>
+    <div class="orb bg-pink-400 w-[260px] h-[260px] bottom-[-80px] left-1/3"></div>
+
+    <div class="relative mx-auto max-w-5xl px-6 text-center">
+      <div class="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white/70 px-4 py-1.5 text-xs font-medium text-brand-700 shadow-sm">
+        <span class="h-1.5 w-1.5 rounded-full bg-brand-500 animate-pulse"></span>
+        AI 驱动 · 本地运行 · 支持 Windows
+      </div>
+      <h1 class="mt-6 text-5xl sm:text-6xl font-bold tracking-tight leading-[1.1]">
+        让 AI 帮你写<br class="sm:hidden" />
+        <span class="gradient-text">一份像样的工作总结</span>
+      </h1>
+      <p class="mt-6 text-lg text-ink-500 max-w-2xl mx-auto leading-relaxed">
+        输入工作文件夹路径，自动扫描项目代码与文档，结合 Git 贡献分析和 AI 智能总结，
+        一键生成结构化的年终总结、晋升述职与周报。
+      </p>
+      <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+        <a href="#download" class="group inline-flex items-center gap-2 rounded-full bg-ink-900 hover:bg-brand-600 text-white px-7 py-3.5 text-base font-medium shadow-glow transition">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          免费下载 Windows 版
+        </a>
+        <a href="#features" class="inline-flex items-center gap-2 rounded-full border border-slate-300 hover:border-ink-900 px-7 py-3.5 text-base text-ink-700 transition">
+          了解功能 →
+        </a>
+      </div>
+
+      <!-- 预览卡片 -->
+      <div class="relative mt-20 mx-auto max-w-4xl">
+        <div class="absolute -inset-4 bg-gradient-to-r from-brand-500/20 via-purple-500/20 to-pink-400/20 rounded-3xl blur-2xl"></div>
+        <div class="relative rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden">
+          <div class="flex items-center gap-1.5 px-4 py-3 border-b border-slate-100 bg-slate-50/70">
+            <span class="h-3 w-3 rounded-full bg-red-400"></span>
+            <span class="h-3 w-3 rounded-full bg-yellow-400"></span>
+            <span class="h-3 w-3 rounded-full bg-green-400"></span>
+            <span class="ml-4 text-xs text-ink-300">智能工作总结 · HomeView</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-0 p-8 text-left bg-gradient-to-br from-slate-50 to-white">
+            <div class="p-5 rounded-xl border border-slate-100 bg-white">
+              <div class="text-2xl">🔍</div>
+              <div class="mt-2 font-semibold">智能扫描</div>
+              <div class="text-sm text-ink-500 mt-1">自动识别项目边界与技术栈</div>
+            </div>
+            <div class="p-5 rounded-xl border border-slate-100 bg-white md:mx-4 md:-translate-y-2">
+              <div class="text-2xl">🤖</div>
+              <div class="mt-2 font-semibold">AI 总结</div>
+              <div class="text-sm text-ink-500 mt-1">按维度生成，支持流式润色</div>
+            </div>
+            <div class="p-5 rounded-xl border border-slate-100 bg-white">
+              <div class="text-2xl">📥</div>
+              <div class="mt-2 font-semibold">多格式导出</div>
+              <div class="text-sm text-ink-500 mt-1">Markdown / Word / PDF / PPT</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 功能特性 -->
+  <section id="features" class="py-24 bg-slate-50/60">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16">
+        <div class="text-sm font-semibold text-brand-600 tracking-wider">FEATURES</div>
+        <h2 class="mt-2 text-4xl font-bold">为"写总结"这件麻烦事而生</h2>
+        <p class="mt-4 text-ink-500 max-w-2xl mx-auto">从扫描代码到生成文档，全链路自动化，让你把时间花在真正重要的事情上。</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- feature card -->
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">🔍</div>
+          <h3 class="mt-4 text-lg font-semibold">智能项目扫描</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">自动识别文件夹中的项目边界和技术栈，支持前端、后端、Python、Java 等多种项目类型。</p>
+        </div>
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">📊</div>
+          <h3 class="mt-4 text-lg font-semibold">Git 贡献分析</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">通过 Git 日志精确识别个人代码贡献，统计提交数、代码行数、开发时间线等关键指标。</p>
+        </div>
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">🤖</div>
+          <h3 class="mt-4 text-lg font-semibold">AI 智能总结</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">基于 DeepSeek / Claude / GPT 等大模型，按维度生成专业总结，支持流式输出和局部润色。</p>
+        </div>
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">📄</div>
+          <h3 class="mt-4 text-lg font-semibold">多格式文档解析</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">自动解析 Word、PPT、PDF、Excel 等文档内容，提取关键信息辅助总结生成。</p>
+        </div>
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">📋</div>
+          <h3 class="mt-4 text-lg font-semibold">补充材料</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">支持粘贴会议纪要、周报等补充材料，可添加多份文档辅助 AI 生成更全面的总结。</p>
+        </div>
+        <div class="group p-7 rounded-2xl bg-white border border-slate-200/70 hover:border-brand-500/50 hover:shadow-card transition">
+          <div class="text-3xl">📥</div>
+          <h3 class="mt-4 text-lg font-semibold">多格式导出</h3>
+          <p class="mt-2 text-ink-500 leading-relaxed">生成的总结支持 Markdown、Word、PDF、PPT 多种格式导出，满足不同提交需求。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 使用流程 -->
+  <section class="py-24">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16">
+        <div class="text-sm font-semibold text-brand-600 tracking-wider">HOW IT WORKS</div>
+        <h2 class="mt-2 text-4xl font-bold">六步搞定一份工作总结</h2>
+      </div>
+      <ol class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 01</div><div class="mt-1 font-semibold">配置设置</div><p class="text-sm text-ink-500 mt-1">配置 API Key、Git 用户名等</p></li>
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 02</div><div class="mt-1 font-semibold">扫描文件</div><p class="text-sm text-ink-500 mt-1">输入路径，自动识别项目</p></li>
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 03</div><div class="mt-1 font-semibold">查看分析</div><p class="text-sm text-ink-500 mt-1">预览技术栈、Git 统计</p></li>
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 04</div><div class="mt-1 font-semibold">补充材料</div><p class="text-sm text-ink-500 mt-1">粘贴会议纪要等补充</p></li>
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 05</div><div class="mt-1 font-semibold">AI 生成</div><p class="text-sm text-ink-500 mt-1">智能生成结构化总结</p></li>
+        <li class="p-6 rounded-xl border border-slate-200"><div class="text-brand-500 font-mono text-sm">STEP 06</div><div class="mt-1 font-semibold">预览导出</div><p class="text-sm text-ink-500 mt-1">编辑并导出多种格式</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 产品截图 -->
+  <section id="screenshots" class="py-24 bg-slate-50/60">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16">
+        <div class="text-sm font-semibold text-brand-600 tracking-wider">PREVIEW</div>
+        <h2 class="mt-2 text-4xl font-bold">清爽、专业的桌面体验</h2>
+        <p class="mt-4 text-ink-500">为生产力工具打造的界面设计，每个细节都经过打磨。</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <figure class="rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden">
+          <img src="./screenshots/home.png" alt="首页" class="w-full aspect-video object-cover bg-slate-100"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-full aspect-video flex items-center justify-center text-ink-300 bg-gradient-to-br from-slate-100 to-slate-200',innerText:'首页截图占位 · 替换 screenshots/home.png'}))" />
+          <figcaption class="p-4 text-sm text-ink-500">主页 · 一键开始</figcaption>
+        </figure>
+        <figure class="rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden">
+          <img src="./screenshots/generate.png" alt="生成页" class="w-full aspect-video object-cover bg-slate-100"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-full aspect-video flex items-center justify-center text-ink-300 bg-gradient-to-br from-slate-100 to-slate-200',innerText:'AI 生成截图占位 · 替换 screenshots/generate.png'}))" />
+          <figcaption class="p-4 text-sm text-ink-500">AI 生成 · 流式输出</figcaption>
+        </figure>
+        <figure class="rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden">
+          <img src="./screenshots/analysis.png" alt="分析页" class="w-full aspect-video object-cover bg-slate-100"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-full aspect-video flex items-center justify-center text-ink-300 bg-gradient-to-br from-slate-100 to-slate-200',innerText:'项目分析截图占位 · 替换 screenshots/analysis.png'}))" />
+          <figcaption class="p-4 text-sm text-ink-500">项目分析 · 技术栈与 Git 统计</figcaption>
+        </figure>
+        <figure class="rounded-2xl border border-slate-200 bg-white shadow-card overflow-hidden">
+          <img src="./screenshots/preview.png" alt="预览页" class="w-full aspect-video object-cover bg-slate-100"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-full aspect-video flex items-center justify-center text-ink-300 bg-gradient-to-br from-slate-100 to-slate-200',innerText:'预览导出截图占位 · 替换 screenshots/preview.png'}))" />
+          <figcaption class="p-4 text-sm text-ink-500">预览导出 · 多格式输出</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 下载区 -->
+  <section id="download" class="py-24">
+    <div class="mx-auto max-w-5xl px-6">
+      <div class="relative rounded-3xl bg-gradient-to-br from-ink-900 via-brand-700 to-purple-700 text-white p-10 md:p-14 overflow-hidden">
+        <div class="orb bg-brand-500 w-[260px] h-[260px] -top-20 -right-10 opacity-40"></div>
+        <div class="relative grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+          <div>
+            <div class="text-sm tracking-wider text-brand-100">DOWNLOAD</div>
+            <h2 class="mt-2 text-3xl md:text-4xl font-bold leading-tight">立刻开始<br />你的第一份 AI 工作总结</h2>
+            <p class="mt-4 text-brand-100/80">免费、完全本地运行，所有数据留在你的电脑上。</p>
+            <p class="mt-2 text-xs text-brand-100/60">当前版本 v1.0.0 · 系统要求 Windows 10 / 11 (x64)</p>
+          </div>
+          <div class="space-y-3">
+            <a id="dl-win"
+               href="#"
+               class="flex items-center justify-between gap-4 rounded-xl bg-white text-ink-900 px-6 py-5 hover:shadow-glow transition">
+              <div class="flex items-center gap-4">
+                <svg class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5L11 4v7.5H3v-6zM12 3.85L21 2.5v9H12v-7.65zM3 12.5h8V20L3 18.5v-6zM12 12.5h9v9L12 20.15V12.5z"/></svg>
+                <div>
+                  <div class="text-xs text-ink-300">Windows 10 / 11 · x64</div>
+                  <div class="font-semibold">下载 Windows 安装包 (.exe)</div>
+                </div>
+              </div>
+              <span>↓</span>
+            </a>
+            <a href="https://github.com/mochabohe/work-summary/releases" target="_blank" rel="noopener"
+               class="flex items-center justify-between gap-4 rounded-xl bg-white/10 border border-white/20 px-6 py-4 hover:bg-white/15 transition">
+              <div class="flex items-center gap-4">
+                <svg class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0C17.3 4.4 18.3 4.7 18.3 4.7c.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0012 .5z"/></svg>
+                <div>
+                  <div class="text-xs text-white/60">所有平台历史版本</div>
+                  <div class="font-semibold">GitHub Releases</div>
+                </div>
+              </div>
+              <span>↗</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ 简版 -->
+  <section class="py-20 bg-slate-50/60">
+    <div class="mx-auto max-w-3xl px-6">
+      <h2 class="text-2xl font-bold text-center">常见问题</h2>
+      <div class="mt-8 divide-y divide-slate-200 border border-slate-200 rounded-xl bg-white">
+        <details class="group p-5">
+          <summary class="flex justify-between items-center cursor-pointer font-medium">我的代码和文档会被上传吗？<span class="text-ink-300 group-open:rotate-180 transition">⌄</span></summary>
+          <p class="mt-3 text-ink-500 text-sm">不会。项目扫描、Git 分析均在本地完成,只有最终生成总结时,才会按你的配置把必要的摘要发送给你选择的大模型服务商。</p>
+        </details>
+        <details class="group p-5">
+          <summary class="flex justify-between items-center cursor-pointer font-medium">支持哪些大模型?<span class="text-ink-300 group-open:rotate-180 transition">⌄</span></summary>
+          <p class="mt-3 text-ink-500 text-sm">内置 DeepSeek / Claude / OpenAI 兼容接口,也可在设置中添加自定义模型 Profile 并快速切换。</p>
+        </details>
+        <details class="group p-5">
+          <summary class="flex justify-between items-center cursor-pointer font-medium">是否支持 macOS / Linux?<span class="text-ink-300 group-open:rotate-180 transition">⌄</span></summary>
+          <p class="mt-3 text-ink-500 text-sm">当前仅发布 Windows x64 安装包,后续版本会按需补齐其他平台。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-10 border-t border-slate-200">
+    <div class="mx-auto max-w-6xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-ink-300">
+      <div>© <span id="year"></span> 智能工作总结 · Built with ❤️</div>
+      <div class="flex gap-5">
+        <a href="#features" class="hover:text-ink-700">功能</a>
+        <a href="#download" class="hover:text-ink-700">下载</a>
+        <a href="https://github.com/mochabohe/work-summary" target="_blank" rel="noopener" class="hover:text-ink-700">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ==== 在这里统一修改仓库和版本 ====
+    const GITHUB_REPO   = 'mochabohe/work-summary';
+    const LATEST_VERSION = 'v1.0.0';
+    const WIN_ASSET      = '智能工作总结-Setup-1.0.0.exe'; // electron-builder 产出的文件名
+    // ==================================
+
+    const winUrl = `https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${encodeURIComponent(WIN_ASSET)}`;
+    document.getElementById('dl-win').href = winUrl;
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

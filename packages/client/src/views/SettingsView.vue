@@ -116,7 +116,7 @@
 
     <div class="action-bar">
       <el-button type="primary" size="large" @click="goNext" :disabled="!canProceed">
-        下一步：扫描文件
+        {{ appStore.isGeneral ? '下一步：进入工作空间' : '下一步：扫描文件' }}
       </el-button>
     </div>
   </div>
@@ -160,7 +160,7 @@ const settingsCardTitle = computed(() => (
 
 function goNext() {
   settings.save()
-  router.push('/scan')
+  router.push(appStore.isGeneral ? '/workspace' : '/scan')
 }
 
 // 角色选择
@@ -171,7 +171,7 @@ const developerPresetRoles = [
 ]
 
 const generalPresetRoles = [
-  '项目经理', '产品经理', '销售', '运营', '市场营销', 'UI/UX 设计',
+  '项目经理', '产品经理', '销售', '运营', '数据运营', '市场营销', 'UI/UX 设计',
   '人力资源', '财务', '客服', '行政',
 ]
 

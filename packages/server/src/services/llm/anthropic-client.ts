@@ -51,6 +51,21 @@ export class AnthropicClient {
     return response.content[0]?.type === 'text' ? response.content[0].text : ''
   }
 
+  async chatWithImage(prompt: string, imageBase64: string, mimeType: string): Promise<string> {
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: imageBase64 } },
+          { type: 'text', text: prompt },
+        ],
+      }],
+    })
+    return response.content[0]?.type === 'text' ? response.content[0].text : ''
+  }
+
   async validate(): Promise<boolean> {
     return (await this.validateVerbose()).valid
   }

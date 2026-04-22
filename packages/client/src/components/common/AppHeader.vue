@@ -72,6 +72,7 @@ const developerStepMap: Record<string, number> = {
   '/settings': 0, '/scan': 1, '/analysis': 2, '/feishu': 3, '/generate': 4, '/preview': 5,
 }
 const generalStepMap: Record<string, number> = {
+  '/settings': 0,
   '/workspace': 1, '/workspace/import': 1, '/workspace/manual': 1,
   '/feishu': 2, '/workspace/generate': 3, '/generate': 3, '/preview': 4,
 }
@@ -100,8 +101,8 @@ function onModeCommand(cmd: AppMode | 'onboarding') {
   if (cmd === 'developer' && !['/settings','/scan','/analysis','/generate','/preview','/feishu'].includes(route.path)) {
     router.push('/')
   }
-  if (cmd === 'general' && !['/workspace','/generate','/preview','/feishu'].includes(route.path)) {
-    router.push('/workspace')
+  if (cmd === 'general' && !['/settings','/workspace','/generate','/preview','/feishu'].includes(route.path)) {
+    router.push('/settings')
   }
 }
 </script>

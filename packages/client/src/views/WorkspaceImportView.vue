@@ -1,5 +1,13 @@
 <template>
   <div class="import-view">
+    <input
+      ref="docInputRef"
+      type="file"
+      multiple
+      accept=".docx,.pdf,.pptx,.xlsx,.xls,.md,.txt,.html,.htm,.png,.jpg,.jpeg,.webp,.gif,.bmp"
+      class="hidden-input"
+      @change="handleDocSelect"
+    >
     <div class="page-header">
       <el-button link @click="$router.push('/workspace')">
         <el-icon><ArrowLeft /></el-icon>
@@ -8,34 +16,53 @@
       <h2>从文档导入工作项</h2>
     </div>
 
-    <div class="upload-grid" v-if="draft.length === 0 && !extracting">
+    <div class="upload-grid" v-if="draft.length === 0 && pendingFiles.length === 0 && !extracting">
       <div class="upload-card">
         <div class="card-icon">📄</div>
         <h3>文档智能抽取</h3>
         <p>
-          上传周报、月报、会议纪要（Word / PDF / PPT / Excel / Markdown / TXT），
+          上传周报、月报、会议纪要（Word / PDF / PPT / Excel / 图片 / Markdown / TXT），
           <br>
           AI 自动结构化为工作项
         </p>
-        <input
-          ref="docInputRef"
-          type="file"
-          multiple
-          accept=".docx,.pdf,.pptx,.xlsx,.xls,.md,.txt,.html,.htm"
-          class="hidden-input"
-          @change="handleDocSelect"
-        >
         <el-button
           type="primary"
           size="large"
-          :loading="parsing || extracting"
           @click="openDocPicker"
         >
           <el-icon><Upload /></el-icon>
           选择文档
         </el-button>
-        <p class="card-hint">单文件 <= 20MB，支持多选文件</p>
+        <p class="card-hint">单文件 <= 20MB，支持多选文件，可分多次添加</p>
       </div>
+    </div>
+
+    <!-- 待解析文件队列 -->
+    <div v-if="pendingFiles.length > 0 && !extracting" class="pending-section">
+      <div class="pending-header">
+        <h3>待解析文件 ({{ pendingFiles.length }})</h3>
+        <div>
+          <el-button @click="clearPending">清空</el-button>
+          <el-button @click="openDocPicker">
+            <el-icon><Upload /></el-icon>
+            继续添加
+          </el-button>
+          <el-button type="primary" @click="startExtract">
+            <el-icon><Loading /></el-icon>
+            开始解析 ({{ pendingFiles.length }})
+          </el-button>
+        </div>
+      </div>
+      <ul class="pending-list">
+        <li v-for="(file, idx) in pendingFiles" :key="idx" class="pending-item">
+          <span class="pending-name">📄 {{ file.name }}</span>
+          <span class="pending-size">{{ formatFileSize(file.size) }}</span>
+          <el-button size="small" link @click="removePending(idx)">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </li>
+      </ul>
+      <p class="pending-hint">点击"开始解析"后将依次调用 AI 抽取工作项，过程中无法添加新文档</p>
     </div>
 
     <div v-if="extracting" class="extracting-box">
@@ -55,6 +82,10 @@
         </div>
         <div>
           <el-button @click="cancelDraft">放弃</el-button>
+          <el-button @click="openDocPicker">
+            <el-icon><Upload /></el-icon>
+            继续添加文档
+          </el-button>
           <el-button type="primary" @click="confirmDraft">
             全部确认导入 ({{ draft.length }})
           </el-button>
@@ -136,6 +167,7 @@ const extracting = ref(false)
 const editingItem = ref<WorkItem | null>(null)
 const docInputRef = ref<HTMLInputElement | null>(null)
 const progressText = ref('')
+const pendingFiles = ref<File[]>([])
 
 const draft = computed(() => store.importDraft)
 const lowConfCount = computed(() => store.lowConfidenceDraftCount)
@@ -150,7 +182,21 @@ function openDocPicker() {
   docInputRef.value?.click()
 }
 
-async function handleDocSelect(event: Event) {
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+function removePending(idx: number) {
+  pendingFiles.value.splice(idx, 1)
+}
+
+function clearPending() {
+  pendingFiles.value = []
+}
+
+function handleDocSelect(event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   if (files.length === 0) return
@@ -162,51 +208,86 @@ async function handleDocSelect(event: Event) {
     return
   }
 
+  // 去重：同名 + 同大小视为同一文件
+  const existing = new Set(pendingFiles.value.map(f => `${f.name}::${f.size}`))
+  const incoming = files.filter(f => !existing.has(`${f.name}::${f.size}`))
+  const duplicateCount = files.length - incoming.length
+
+  pendingFiles.value.push(...incoming)
+  input.value = ''
+
+  if (duplicateCount > 0) {
+    ElMessage.info(`已添加 ${incoming.length} 个文件，跳过 ${duplicateCount} 个重复文件`)
+  } else if (incoming.length > 0) {
+    ElMessage.success(`已添加 ${incoming.length} 个文件，点击"开始解析"开始 AI 抽取`)
+  }
+}
+
+async function startExtract() {
+  const files = pendingFiles.value.slice()
+  if (files.length === 0) return
+
+  const MAX_CONCURRENCY = 3
+  let completed = 0
+  const warnings: string[] = []
+  const errors: string[] = []
   const collectedItems: WorkItem[] = []
-  let parsedCount = 0
 
   try {
-    parsing.value = true
-    progressText.value = `正在解析 1 / ${files.length} 个文档...`
+    parsing.value = false
+    extracting.value = true
+    progressText.value = `并行解析 0 / ${files.length} 个文档...`
 
-    for (const [index, file] of files.entries()) {
-      parsing.value = true
-      extracting.value = false
-      progressText.value = `正在解析 ${index + 1} / ${files.length} 个文档：${file.name}`
-      const parsed = await parseDocument(file)
-      parsedCount += 1
-
-      parsing.value = false
-      extracting.value = true
-      progressText.value = `正在抽取 ${index + 1} / ${files.length} 个文档中的工作项：${file.name}`
-      const res = await extractItems(parsed.text)
-
-      if (res.warning) {
-        ElMessage.warning(`${file.name}：${res.warning}`)
-        continue
+    // 限流并发池：同时最多 MAX_CONCURRENCY 个文档在跑 (parse + extract)
+    let cursor = 0
+    const runWorker = async (): Promise<void> => {
+      while (cursor < files.length) {
+        const idx = cursor++
+        const file = files[idx]
+        try {
+          const parsed = await parseDocument(file)
+          const res = await extractItems(parsed.text)
+          if (res.warning) {
+            warnings.push(`${file.name}：${res.warning}`)
+          } else {
+            collectedItems.push(...res.items)
+          }
+        } catch (err) {
+          errors.push(`${file.name}：${(err as Error).message}`)
+        } finally {
+          completed += 1
+          progressText.value = `并行解析 ${completed} / ${files.length} 个文档...`
+        }
       }
-
-      collectedItems.push(...res.items)
     }
 
+    const workerCount = Math.min(MAX_CONCURRENCY, files.length)
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()))
+
+    warnings.forEach(msg => ElMessage.warning(msg))
+    errors.forEach(msg => ElMessage.error(msg))
+
     if (collectedItems.length === 0) {
-      ElMessage.info(files.length === 1
-        ? '未从文档中识别到工作项，请尝试手动录入'
-        : '未从所选文档中识别到工作项，请尝试手动录入')
+      if (errors.length === 0) {
+        ElMessage.info('未从所选文档中识别到工作项，请尝试手动录入')
+      }
       return
     }
 
-    store.setDraft(collectedItems)
-    ElMessage.success(files.length === 1
-      ? `识别出 ${collectedItems.length} 条工作项，请确认后导入`
-      : `已解析 ${parsedCount} 个文档，识别出 ${collectedItems.length} 条工作项`)
-  } catch (err) {
-    ElMessage.error(`解析失败：${(err as Error).message}`)
+    const isAppend = store.importDraft.length > 0
+    if (isAppend) {
+      store.appendDraft(collectedItems)
+      ElMessage.success(`已追加 ${collectedItems.length} 条工作项，当前共 ${store.importDraft.length} 条`)
+    } else {
+      store.setDraft(collectedItems)
+      ElMessage.success(`已解析 ${files.length - errors.length} 个文档，识别出 ${collectedItems.length} 条工作项`)
+    }
+
+    pendingFiles.value = []
   } finally {
     parsing.value = false
     extracting.value = false
     progressText.value = ''
-    input.value = ''
   }
 }
 
@@ -259,6 +340,66 @@ function onEditorSave(item: WorkItem) {
 .upload-grid .upload-card {
   max-width: 520px;
   width: 100%;
+}
+
+.pending-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.pending-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pending-header h3 {
+  margin: 0;
+  color: var(--ws-text-primary, #fff);
+  font-size: 16px;
+}
+
+.pending-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pending-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ws-text-primary, #fff);
+}
+
+.pending-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-size {
+  color: var(--ws-text-muted, rgba(255, 255, 255, 0.5));
+  font-size: 12px;
+  min-width: 70px;
+  text-align: right;
+}
+
+.pending-hint {
+  font-size: 12px;
+  color: var(--ws-text-muted, rgba(255, 255, 255, 0.5));
+  margin: 0;
 }
 
 .upload-card {

@@ -57,7 +57,7 @@ async function startServer(port: number): Promise<void> {
 
     let resolved = false
     let stderrOutput = ''
-    let fallbackTimer: ReturnType<typeof setTimeout>
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
 
     serverProcess.stdout?.on('data', (data: Buffer) => {
       const msg = data.toString()
@@ -94,7 +94,7 @@ async function startServer(port: number): Promise<void> {
 
     // 超时兜底：若 15 秒内未收到 listening 输出，主动探测端口是否就绪
     // 避免慢机器上 "5秒超时就假成功" 导致 window 打开时 server 还未监听
-    const fallbackTimer = setTimeout(() => {
+    fallbackTimer = setTimeout(() => {
       if (resolved) return
       const socket = net.createConnection({ port, host: '127.0.0.1' })
       socket.on('connect', () => {

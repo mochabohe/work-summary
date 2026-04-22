@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { WorkItem, ReportPeriod } from '@work-summary/shared'
+import { useSummaryStore } from './summary'
 
 const STORAGE_KEY = 'work-summary-workspace'
 
@@ -44,13 +45,27 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   watch([workItems, importDraft], persist, { deep: true })
 
+  // 新增工作项后，之前基于旧数据生成的总结已过期 → 清空
+  function invalidateGeneratedSummary() {
+    try {
+      const summaryStore = useSummaryStore()
+      if (summaryStore.content) {
+        summaryStore.clearGenerated()
+      }
+    } catch {
+      // pinia 未就绪或 summary store 不可用时静默跳过
+    }
+  }
+
   // ---- WorkItem CRUD ----
   function addItem(item: WorkItem) {
     workItems.value.unshift(item)
+    invalidateGeneratedSummary()
   }
 
   function addItems(items: WorkItem[]) {
     workItems.value.unshift(...items)
+    invalidateGeneratedSummary()
   }
 
   function updateItem(id: string, patch: Partial<WorkItem>) {
@@ -65,11 +80,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   function clearItems() {
     workItems.value = []
+    invalidateGeneratedSummary()
   }
 
   // ---- Draft 草稿 ----
   function setDraft(items: WorkItem[]) {
     importDraft.value = items
+  }
+
+  function appendDraft(items: WorkItem[]) {
+    importDraft.value.push(...items)
   }
 
   function updateDraftItem(id: string, patch: Partial<WorkItem>) {
@@ -138,6 +158,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     removeItem,
     clearItems,
     setDraft,
+    appendDraft,
     updateDraftItem,
     removeDraftItem,
     clearDraft,

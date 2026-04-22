@@ -1,0 +1,10 @@
+{
+  "name": "@work-summary/website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "智能工作总结 - 官方介绍站点（纯静态）",
+  "scripts": {
+    "dev": "npx -y serve . -l 5180",
+    "preview": "npx -y serve . -l 5180"
+  }
+}

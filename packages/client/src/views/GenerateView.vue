@@ -16,7 +16,7 @@
                   {{ configCollapsed ? '展开配置' : '收起配置' }}
                 </el-button>
               </div>
-              <div class="generate-model-hint">
+              <div v-if="false" class="generate-model-hint">
                 <span class="generate-model-label">当前生成模型</span>
                 <span class="generate-model-value">{{ currentGenerationModel }}</span>
                 <span class="generate-model-meta">模型厂商：{{ currentGenerationModelVendor }}</span>

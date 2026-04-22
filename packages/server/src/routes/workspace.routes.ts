@@ -9,7 +9,7 @@ import { WorkItemExtractor } from '../services/workspace/extractor.js'
 import { templateRegistry } from '../services/templates/registry.js'
 import { derivePeriodRange } from '../services/templates/filter.js'
 
-const SUPPORTED_TEXT_EXTS = ['.docx', '.pptx', '.pdf', '.md', '.txt', '.html', '.htm', '.xlsx', '.xls']
+const SUPPORTED_TEXT_EXTS = ['.docx', '.pptx', '.pdf', '.md', '.txt', '.html', '.htm', '.xlsx', '.xls', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']
 
 export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   const parser = new ParserService()

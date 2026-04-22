@@ -76,11 +76,7 @@ const hoverMode = ref<AppMode | null>(null)
 
 function choose(m: AppMode) {
   appStore.setMode(m)
-  if (m === 'developer') {
-    router.replace('/settings')
-  } else {
-    router.replace('/workspace')
-  }
+  router.replace('/settings')
 }
 </script>
 
