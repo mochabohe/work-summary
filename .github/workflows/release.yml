@@ -92,15 +92,32 @@ jobs:
       - name: Build electron main process
         run: pnpm --filter @work-summary/electron build
 
-      - name: Ensure .env exists (CI has no local .env)
+      - name: Generate .env from PROD_ENV_FILE secret
         shell: bash
+        env:
+          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         run: |
-          if [ ! -f .env ]; then
-            if [ -f .env.example ]; then
-              cp .env.example .env
-            else
-              touch .env
-            fi
+          # 通过 env mapping 注入,避免 ${{ }} 插值遇到 secret 中的引号/反斜杠时炸 shell
+          if [ -n "$PROD_ENV_FILE" ]; then
+            printf '%s' "$PROD_ENV_FILE" > .env
+            echo ".env 已从 PROD_ENV_FILE secret 生成（$(wc -l < .env | tr -d ' ') 行,$(wc -c < .env | tr -d ' ') 字节）"
+          elif [ -f .env.example ]; then
+            echo "::warning::未配置 PROD_ENV_FILE secret,回退到 .env.example(打包产物将只含占位符)"
+            cp .env.example .env
+          else
+            echo "::warning::未配置 PROD_ENV_FILE secret 且无 .env.example,生成空 .env"
+            touch .env
+          fi
+          # 校验至少存在一组有效的模型 API_KEY,否则 CI 直接 fail
+          # 避免 "生成占位符 .env → 打进安装包 → 用户端 fetch failed" 的静默坏包
+          if ! grep -qE '^(MODEL_GPT_API_KEY|MODEL_CLAUDE_API_KEY|DEEPSEEK_API_KEY)=[^[:space:]]+' .env; then
+            echo "::error::生成的 .env 缺少真实的模型 API_KEY(MODEL_GPT_API_KEY / MODEL_CLAUDE_API_KEY / DEEPSEEK_API_KEY 至少一个)。请在 repo Settings → Secrets → Actions 添加 PROD_ENV_FILE secret,内容为完整可用的 .env 文件。"
+            exit 1
+          fi
+          # 拒绝常见占位符泄漏(防止把 .env.example 原样当成真 key)
+          if grep -qE '(sk-your-|your-key-here|your_app_id_here|example\.com)' .env; then
+            echo "::error::.env 包含占位符内容(sk-your- / your-key-here / example.com),说明 PROD_ENV_FILE secret 实际是 .env.example 模板。请用真实 key 覆盖。"
+            exit 1
           fi
 
       - name: Package for Windows
