@@ -212,5 +212,30 @@
       "duration": 2867
     },
     "savedAt": 1776597680296
+  },
+  "C:/Users/25198/Desktop/DC-Project/work-summary": {
+    "mtimes": {
+      "C:/Users/25198/Desktop/DC-Project/work-summary": 1776837625565.6143
+    },
+    "result": {
+      "projects": [
+        {
+          "name": "work-summary",
+          "path": "C:/Users/25198/Desktop/DC-Project/work-summary",
+          "type": "other",
+          "techStack": [
+            "TypeScript"
+          ],
+          "fileCount": 127,
+          "hasGit": true,
+          "description": "智能工作总结生成器",
+          "userCommitCount": 55
+        }
+      ],
+      "standaloneDocuments": [],
+      "totalFiles": 127,
+      "duration": 201
+    },
+    "savedAt": 1776838066352
   }
 }
