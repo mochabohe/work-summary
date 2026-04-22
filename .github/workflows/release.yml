@@ -1,0 +1,125 @@
+name: Build & Release
+
+# 触发方式:
+#   1. push 一个 v* 开头的 tag(例如 v1.0.1)→ 自动打包 + 发布 Release
+#   2. 仓库 Actions 页面手动点 "Run workflow" → 只打包,不发 Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared / server / client
+        run: |
+          pnpm --filter @work-summary/shared build
+          pnpm --filter @work-summary/server build
+          pnpm --filter @work-summary/client build
+
+      - name: Bundle server into server.cjs
+        shell: bash
+        run: |
+          # 1. 把 shared 复制到 server 的 node_modules(解决 workspace 依赖)
+          SHARED_LINK="packages/server/node_modules/@work-summary/shared"
+          rm -rf "$SHARED_LINK"
+          mkdir -p "$SHARED_LINK/dist" "$SHARED_LINK/src"
+          cp packages/shared/package.json "$SHARED_LINK/package.json"
+          cp -r packages/shared/src/* "$SHARED_LINK/src/"
+          cp -r packages/shared/dist/* "$SHARED_LINK/dist/"
+
+          # 2. 用 esbuild 把 server 打包成单文件 CJS(消除 node_modules 依赖)
+          pnpm --filter @work-summary/electron exec esbuild \
+            packages/server/dist/index.js \
+            --bundle \
+            --platform=node \
+            --format=cjs \
+            --outfile=packages/server/server.cjs \
+            --external:fsevents \
+            --banner:js="const __importMetaUrl = require('url').pathToFileURL(__filename).href;" \
+            --define:'import.meta.url'='__importMetaUrl'
+
+      - name: Build electron main process
+        run: pnpm --filter @work-summary/electron build
+
+      - name: Ensure .env exists (CI has no local .env)
+        shell: bash
+        run: |
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
+          fi
+
+      - name: Package for Windows
+        if: runner.os == 'Windows'
+        run: pnpm --filter @work-summary/electron run pack:win
+
+      - name: Package for macOS
+        if: runner.os == 'macOS'
+        run: pnpm --filter @work-summary/electron run pack:mac
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.blockmap
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release/
+
+      - name: Flatten artifact directories
+        run: |
+          mkdir -p dist
+          find release -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.blockmap' \) -exec cp {} dist/ \;
+          ls -lh dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

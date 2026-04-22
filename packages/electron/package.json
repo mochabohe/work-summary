@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc",
     "pack": "electron-builder --win --x64",
+    "pack:win": "electron-builder --win --x64",
+    "pack:mac": "electron-builder --mac --universal",
     "dist": "electron-builder --win --x64"
   },
   "dependencies": {
@@ -51,6 +53,24 @@
           ]
         }
       ]
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "work-summary-${version}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "writeUpdateInfo": false
     },
     "nsis": {
       "oneClick": false,
