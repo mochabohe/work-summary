@@ -114,9 +114,11 @@ jobs:
             echo "::error::生成的 .env 缺少真实的模型 API_KEY(MODEL_GPT_API_KEY / MODEL_CLAUDE_API_KEY / DEEPSEEK_API_KEY 至少一个)。请在 repo Settings → Secrets → Actions 添加 PROD_ENV_FILE secret,内容为完整可用的 .env 文件。"
             exit 1
           fi
-          # 拒绝常见占位符泄漏(防止把 .env.example 原样当成真 key)
-          if grep -qE '(sk-your-|your-key-here|your_app_id_here|example\.com)' .env; then
-            echo "::error::.env 包含占位符内容(sk-your- / your-key-here / example.com),说明 PROD_ENV_FILE secret 实际是 .env.example 模板。请用真实 key 覆盖。"
+          # 只检测关键模型 API_KEY 是否为占位符,其他业务字段(FEISHU / BAIDU 等)用户可能不用,
+          # 允许保持 your_xxx_here 占位符
+          if grep -E '^(MODEL_GPT_API_KEY|MODEL_CLAUDE_API_KEY|DEEPSEEK_API_KEY)=' .env \
+             | grep -qE '(sk-your-|your-key-here|your-.*-key)'; then
+            echo "::error::MODEL_*_API_KEY 或 DEEPSEEK_API_KEY 的值仍是占位符(sk-your- 开头),请用真实 key 覆盖 PROD_ENV_FILE secret。"
             exit 1
           fi
 
