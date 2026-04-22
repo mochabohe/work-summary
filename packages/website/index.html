@@ -299,7 +299,7 @@
     // ==== 在这里统一修改仓库和版本 ====
     const GITHUB_REPO    = 'mochabohe/work-summary';
     const LATEST_VERSION = 'v1.0.0';
-    const WIN_ASSET      = 'Setup.1.0.0.exe';  // GitHub 把中文剥掉后的实际文件名;下次重打包后会变成 work-summary-setup-1.0.0.exe
+    const WIN_ASSET      = 'work-summary-setup-1.0.0.exe';  // 纯 ASCII 文件名,GitHub 上传不会被改动
     // ==================================
 
     const winUrl = `https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${encodeURIComponent(WIN_ASSET)}`;
