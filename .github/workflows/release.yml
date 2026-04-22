@@ -97,7 +97,7 @@ jobs:
         env:
           PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         run: |
-          # 通过 env mapping 注入,避免 ${{ }} 插值遇到 secret 中的引号/反斜杠时炸 shell
+          # 通过 env mapping 注入,避免 GitHub 表达式插值遇到 secret 中的引号/反斜杠时炸 shell
           if [ -n "$PROD_ENV_FILE" ]; then
             printf '%s' "$PROD_ENV_FILE" > .env
             echo ".env 已从 PROD_ENV_FILE secret 生成（$(wc -l < .env | tr -d ' ') 行,$(wc -c < .env | tr -d ' ') 字节）"
