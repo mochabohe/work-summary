@@ -58,6 +58,7 @@ jobs:
           ls -la node_modules/@work-summary/ 2>&1 || echo "(no root/node_modules/@work-summary)"
 
       - name: Build shared / server / client
+        shell: bash
         run: |
           pnpm --filter @work-summary/shared build
           echo "=== shared/dist/ AFTER shared build ==="

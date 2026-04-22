@@ -25,7 +25,7 @@
     "productName": "智能工作总结",
     "artifactName": "work-summary-setup-${version}.${ext}",
     "directories": {
-      "output": "../../../release"
+      "output": "../../release"
     },
     "files": [
       "dist/**/*"
