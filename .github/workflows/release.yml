@@ -38,6 +38,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Clean stale build artifacts (tsbuildinfo / dist)
+        shell: bash
+        run: |
+          find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete || true
+          rm -rf packages/shared/dist packages/server/dist packages/client/dist packages/electron/dist
+
       - name: Build shared / server / client
         run: |
           pnpm --filter @work-summary/shared build

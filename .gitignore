@@ -11,3 +11,4 @@ coverage
 .launcherhelper/
 packages/server/server.cjs
 release/
+*.tsbuildinfo
