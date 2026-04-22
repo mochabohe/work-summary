@@ -77,12 +77,13 @@ jobs:
           cp -r packages/shared/dist/* "$SHARED_LINK/dist/"
 
           # 2. 用 esbuild 把 server 打包成单文件 CJS(消除 node_modules 依赖)
+          # 注意:pnpm --filter exec 会切换 CWD 到对应包目录,所以这里用绝对路径
           pnpm --filter @work-summary/electron exec esbuild \
-            packages/server/dist/index.js \
+            "$GITHUB_WORKSPACE/packages/server/dist/index.js" \
             --bundle \
             --platform=node \
             --format=cjs \
-            --outfile=packages/server/server.cjs \
+            --outfile="$GITHUB_WORKSPACE/packages/server/server.cjs" \
             --external:fsevents \
             --banner:js="const __importMetaUrl = require('url').pathToFileURL(__filename).href;" \
             --define:'import.meta.url'='__importMetaUrl'
