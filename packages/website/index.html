@@ -274,16 +274,17 @@
   </footer>
 
   <script>
-    // ==== 在这里统一修改仓库和版本 ====
-    const GITHUB_REPO    = 'mochabohe/work-summary';
-    const LATEST_VERSION = 'v1.0.2';
-    const WIN_ASSET      = 'work-summary-setup-1.0.2.exe';  // Windows 安装包(electron-builder 产物)
-    const MAC_ASSET      = 'work-summary-1.0.2-universal.dmg'; // macOS 通用包(Intel + Apple Silicon)
+    // ==== 下载地址（123 云盘,国内访问友好） ====
+    const WIN_DOWNLOAD_URL = 'https://1818660969.share.123pan.cn/123pan/GZ5hjv-CVKg3';
+    const MAC_DOWNLOAD_URL = 'https://1818660969.share.123pan.cn/123pan/GZ5hjv-WVKg3';
     // ==================================
 
-    const base = `https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}`;
-    document.getElementById('dl-win').href = `${base}/${encodeURIComponent(WIN_ASSET)}`;
-    document.getElementById('dl-mac').href = `${base}/${encodeURIComponent(MAC_ASSET)}`;
+    document.getElementById('dl-win').href = WIN_DOWNLOAD_URL;
+    document.getElementById('dl-win').target = '_blank';
+    document.getElementById('dl-win').rel = 'noopener';
+    document.getElementById('dl-mac').href = MAC_DOWNLOAD_URL;
+    document.getElementById('dl-mac').target = '_blank';
+    document.getElementById('dl-mac').rel = 'noopener';
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
 </body>
