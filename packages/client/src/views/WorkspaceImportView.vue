@@ -33,7 +33,7 @@
           <el-icon><Upload /></el-icon>
           选择文档
         </el-button>
-        <p class="card-hint">单文件 <= 20MB，支持多选文件，可分多次添加</p>
+        <p class="card-hint">单文件 <= 25MB，支持多选文件，可分多次添加</p>
       </div>
     </div>
 
@@ -71,16 +71,22 @@
       <p class="hint">通常需要 10-30 秒，文档越多耗时越长</p>
     </div>
 
-    <div v-if="draft.length > 0 && !extracting" class="draft-section">
+    <div v-if="draft.length > 0" class="draft-section">
       <div class="draft-header">
         <div>
-          <h3>识别到 {{ draft.length }} 条工作项</h3>
-          <p class="draft-hint" v-if="lowConfCount > 0">
+          <h3>
+            识别到 {{ draft.length }} 条工作项
+            <span v-if="extracting" class="streaming-tag">
+              <el-icon class="spin"><Loading /></el-icon>
+              AI 抽取中，结果持续追加...
+            </span>
+          </h3>
+          <p class="draft-hint" v-if="lowConfCount > 0 && !extracting">
             <el-icon color="#f59e0b"><Warning /></el-icon>
             {{ lowConfCount }} 条置信度较低，建议确认细节后再保存
           </p>
         </div>
-        <div>
+        <div v-if="!extracting">
           <el-button @click="cancelDraft">放弃</el-button>
           <el-button @click="openDocPicker">
             <el-icon><Upload /></el-icon>
@@ -201,9 +207,9 @@ function handleDocSelect(event: Event) {
   const files = Array.from(input.files ?? [])
   if (files.length === 0) return
 
-  const oversizeFile = files.find(file => file.size > 20 * 1024 * 1024)
+  const oversizeFile = files.find(file => file.size > 25 * 1024 * 1024)
   if (oversizeFile) {
-    ElMessage.warning(`文件 ${oversizeFile.name} 超过 20MB 限制`)
+    ElMessage.warning(`文件 ${oversizeFile.name} 超过 25MB 限制`)
     input.value = ''
     return
   }
@@ -228,15 +234,55 @@ async function startExtract() {
   if (files.length === 0) return
 
   const MAX_CONCURRENCY = 3
+  // 与 server/extractor.ts 的 CHUNK_CHAR_LIMIT 保持一致：超过该字符数就会被切成多片串/并发抽取
+  const CHUNK_CHAR_LIMIT = 80 * 1024
   let completed = 0
   const warnings: string[] = []
   const errors: string[] = []
-  const collectedItems: WorkItem[] = []
+  // 本次批次累计 append 到 store 的工作项数（用于结束 toast）
+  let collectedCount = 0
+
+  // 抽取开始前：决定追加模式还是新建模式；新建模式清空旧草稿，给项级流式一个干净起点
+  const isAppend = store.importDraft.length > 0
+  // 已 append 过的 title 集合：用于流式去重 + 防止 chunk 间或 done 阶段重复
+  const seenTitles = new Set<string>()
+  if (isAppend) {
+    store.importDraft.forEach(i => seenTitles.add(i.title.trim()))
+  } else {
+    store.clearDraft()
+  }
+
+  // 每个正在跑的文件的子状态：stage = parsing 时 chunks 未知；extracting 时 chunks 已估算
+  type Stage = 'parsing' | 'extracting'
+  const inFlight = new Map<string, { stage: Stage; chunks: number; done: number }>()
+
+  const refreshProgress = () => {
+    const base = `并行解析 ${completed} / ${files.length} 个文档...`
+    const detail = [...inFlight.entries()]
+      .filter(([, v]) => v.stage === 'extracting' && v.chunks > 1)
+      .map(([name, v]) => `${name} 抽取 ${v.done} / ${v.chunks} 片`)
+    progressText.value = detail.length > 0
+      ? `${base}（${detail.join('；')}）`
+      : base
+  }
+
+  const appendStreaming = (items: WorkItem[]) => {
+    const fresh = items.filter(item => {
+      const key = item.title.trim()
+      if (seenTitles.has(key)) return false
+      seenTitles.add(key)
+      return true
+    })
+    if (fresh.length > 0) {
+      store.appendDraft(fresh)
+      collectedCount += fresh.length
+    }
+  }
 
   try {
     parsing.value = false
     extracting.value = true
-    progressText.value = `并行解析 0 / ${files.length} 个文档...`
+    refreshProgress()
 
     // 限流并发池：同时最多 MAX_CONCURRENCY 个文档在跑 (parse + extract)
     let cursor = 0
@@ -245,18 +291,39 @@ async function startExtract() {
         const idx = cursor++
         const file = files[idx]
         try {
+          inFlight.set(file.name, { stage: 'parsing', chunks: 0, done: 0 })
+          refreshProgress()
           const parsed = await parseDocument(file)
-          const res = await extractItems(parsed.text)
+
+          const estChunks = Math.max(1, Math.ceil(parsed.text.length / CHUNK_CHAR_LIMIT))
+          inFlight.set(file.name, { stage: 'extracting', chunks: estChunks, done: 0 })
+          refreshProgress()
+
+          const res = await extractItems(parsed.text, undefined, (event) => {
+            const state = inFlight.get(file.name)
+            if (!state) return
+            if (event.type === 'plan') {
+              state.chunks = event.totalChunks
+            } else if (event.type === 'chunk_done') {
+              state.chunks = event.total
+              state.done = Math.min(state.chunks, state.done + 1)
+              // 项级流式：每片回来就把这片的工作项追加到草稿列表
+              if (event.items.length > 0) {
+                appendStreaming(event.items)
+              }
+            }
+            refreshProgress()
+          })
           if (res.warning) {
             warnings.push(`${file.name}：${res.warning}`)
-          } else {
-            collectedItems.push(...res.items)
           }
+          // res.items 已经在流式 append 阶段全部入库（seenTitles 兜底去重），这里不再二次处理
         } catch (err) {
           errors.push(`${file.name}：${(err as Error).message}`)
         } finally {
+          inFlight.delete(file.name)
           completed += 1
-          progressText.value = `并行解析 ${completed} / ${files.length} 个文档...`
+          refreshProgress()
         }
       }
     }
@@ -267,20 +334,17 @@ async function startExtract() {
     warnings.forEach(msg => ElMessage.warning(msg))
     errors.forEach(msg => ElMessage.error(msg))
 
-    if (collectedItems.length === 0) {
+    if (collectedCount === 0) {
       if (errors.length === 0) {
         ElMessage.info('未从所选文档中识别到工作项，请尝试手动录入')
       }
       return
     }
 
-    const isAppend = store.importDraft.length > 0
     if (isAppend) {
-      store.appendDraft(collectedItems)
-      ElMessage.success(`已追加 ${collectedItems.length} 条工作项，当前共 ${store.importDraft.length} 条`)
+      ElMessage.success(`已追加 ${collectedCount} 条工作项，当前共 ${store.importDraft.length} 条`)
     } else {
-      store.setDraft(collectedItems)
-      ElMessage.success(`已解析 ${files.length - errors.length} 个文档，识别出 ${collectedItems.length} 条工作项`)
+      ElMessage.success(`已解析 ${files.length - errors.length} 个文档，识别出 ${collectedCount} 条工作项`)
     }
 
     pendingFiles.value = []
@@ -499,6 +563,16 @@ function onEditorSave(item: WorkItem) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.streaming-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #a78bfa;
 }
 
 .draft-list {

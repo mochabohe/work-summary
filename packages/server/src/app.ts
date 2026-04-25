@@ -16,7 +16,7 @@ export async function createApp() {
   bootstrapDefaultProfiles()
 
   const app = Fastify({
-    bodyLimit: 10 * 1024 * 1024,
+    bodyLimit: 30 * 1024 * 1024,
     logger: true,
   })
 
@@ -31,10 +31,10 @@ export async function createApp() {
     },
   })
 
-  // 注册 multipart（用于通用模式文档上传）；单文件上限 20MB
+  // 注册 multipart（用于通用模式文档上传）；单文件上限 25MB
   await app.register(multipart, {
     limits: {
-      fileSize: 20 * 1024 * 1024,
+      fileSize: 25 * 1024 * 1024,
       files: 1,
     },
   })

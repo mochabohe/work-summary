@@ -287,6 +287,8 @@ export class LLMService {
     return new OpenAI({
       apiKey: currentConfig.apiKey,
       baseURL: currentConfig.baseURL,
+      // 比前端 axios 超时（300s）略短，确保后端先返回错误而不是被前端先断开
+      timeout: 280_000,
     })
   }
 

@@ -64,6 +64,14 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
 
   /**
    * 文本 → LLM 抽取 WorkItem[]
+   *
+   * 走 SSE 流式：
+   *   data: {"type":"plan","totalChunks":N}
+   *   data: {"type":"chunk_done","index":i,"total":N,"count":k,"parseFailed":false}
+   *   data: {"type":"done","items":[...],"parseFailed":false}
+   *   data: {"type":"error","message":"..."}
+   *
+   * 客户端按 \n\n 切事件，每条事件取 data: 后的 JSON 解析。
    */
   app.post<{
     Body: { text: string; period?: ReportPeriod }
@@ -76,26 +84,65 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       } as ApiResponse)
     }
 
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Content-Encoding': 'identity',
+    })
+    reply.hijack()
+    // 立刻发一条 SSE 注释强制 flush 响应头 + 首块，避免被浏览器 / 代理 buffer 住首 256 字节
+    reply.raw.write(': stream-open\n\n')
+
+    const send = (payload: unknown) => {
+      try {
+        reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`)
+      } catch (err) {
+        app.log.warn(err, 'workspace extract-items SSE write failed')
+      }
+    }
+
     try {
-      const result = await extractor.extract(text, period)
+      const result = await extractor.extract(text, period, {
+        onPlanReady: (totalChunks) => {
+          send({ type: 'plan', totalChunks })
+        },
+        onChunkDone: (progress) => {
+          send({
+            type: 'chunk_done',
+            index: progress.index,
+            total: progress.total,
+            count: progress.items.length,
+            items: progress.items,
+            parseFailed: progress.parseFailed,
+          })
+        },
+      })
+
       if (result.parseFailed) {
-        return reply.status(200).send({
-          success: false,
-          error: 'AI 抽取结果格式错误，建议改用手动录入',
-          data: { items: [], rawResponse: result.rawResponse.slice(0, 500) },
-        } as ApiResponse<{ items: WorkItem[]; rawResponse: string }>)
+        send({
+          type: 'done',
+          items: [],
+          parseFailed: true,
+          rawResponse: result.rawResponse.slice(0, 500),
+          warning: result.warning,
+        })
+      } else {
+        send({
+          type: 'done',
+          items: result.items,
+          parseFailed: false,
+          warning: result.warning,
+        })
       }
-      const response: ApiResponse<{ items: WorkItem[] }> = {
-        success: true,
-        data: { items: result.items },
-      }
-      return reply.send(response)
     } catch (err) {
       app.log.error(err, 'workspace extract-items failed')
-      return reply.status(500).send({
-        success: false,
-        error: (err as Error).message,
-      } as ApiResponse)
+      send({ type: 'error', message: (err as Error).message })
+    } finally {
+      try {
+        reply.raw.end()
+      } catch { /* noop */ }
     }
   })
 
