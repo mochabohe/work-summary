@@ -108,6 +108,17 @@ jobs:
             echo "::warning::未配置 PROD_ENV_FILE secret 且无 .env.example,生成空 .env"
             touch .env
           fi
+          # 远程打包保留 secret 中的 key/baseURL，但模型名跟随仓库默认值，避免 PROD_ENV_FILE 仍停留在旧模型。
+          DEFAULT_GPT_MODEL="$(grep -E '^MODEL_GPT_NAME=' .env.example | tail -1 | cut -d= -f2- || true)"
+          if [ -n "$DEFAULT_GPT_MODEL" ]; then
+            if grep -qE '^MODEL_GPT_NAME=' .env; then
+              sed -i.bak -E "s/^MODEL_GPT_NAME=.*/MODEL_GPT_NAME=${DEFAULT_GPT_MODEL}/" .env
+              rm -f .env.bak
+            else
+              printf '\nMODEL_GPT_NAME=%s\n' "$DEFAULT_GPT_MODEL" >> .env
+            fi
+            echo "MODEL_GPT_NAME 已同步为仓库默认值: ${DEFAULT_GPT_MODEL}"
+          fi
           # 校验至少存在一组有效的模型 API_KEY,否则 CI 直接 fail
           # 避免 "生成占位符 .env → 打进安装包 → 用户端 fetch failed" 的静默坏包
           if ! grep -qE '^(MODEL_GPT_API_KEY|MODEL_CLAUDE_API_KEY|DEEPSEEK_API_KEY)=[^[:space:]]+' .env; then
