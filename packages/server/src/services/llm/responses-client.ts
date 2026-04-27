@@ -24,9 +24,21 @@ export class OpenAIResponsesClient {
     private model: string,
   ) {}
 
+  private logRequest(kind: 'chat' | 'streamChat', url: string, maxTokens: number | undefined): void {
+    console.log('[LLM] responses request', {
+      kind,
+      provider: 'openai-compatible',
+      apiType: 'responses',
+      requestedModel: this.model,
+      endpoint: url,
+      maxOutputTokens: maxTokens,
+    })
+  }
+
   /** 非流式调用：返回完整文本 */
   async chat(messages: ResponsesChatMessage[], opts?: { maxTokens?: number; reasoningEffort?: 'low' | 'medium' | 'high' }): Promise<{ text: string; modelUsed: string; raw: any }> {
     const url = this.joinPath(this.baseURL, '/responses')
+    this.logRequest('chat', url, opts?.maxTokens ?? 2048)
     const body: any = {
       model: this.model,
       input: messages,
@@ -68,6 +80,7 @@ export class OpenAIResponsesClient {
   /** 流式调用：异步生成器，每次 yield 一段 delta 文本 */
   async *streamChat(messages: ResponsesChatMessage[], maxTokens?: number): AsyncGenerator<string> {
     const url = this.joinPath(this.baseURL, '/responses')
+    this.logRequest('streamChat', url, maxTokens ?? 4096)
     const body: any = {
       model: this.model,
       input: messages,

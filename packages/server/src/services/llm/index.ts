@@ -37,7 +37,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-const MAX_RETRIES = 2
+const MAX_RETRIES = 5
 const BASE_DELAY_MS = 2000
 
 // 全局当前模型配置
@@ -342,6 +342,14 @@ export class LLMService {
     let lastError: unknown
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        console.log('[LLM] stream request', {
+          provider: currentConfig.provider,
+          apiType: currentConfig.apiType ?? 'chat',
+          requestedModel: currentConfig.model,
+          endpoint: `${currentConfig.baseURL?.replace(/\/$/, '')}/chat/completions`,
+          attempt: attempt + 1,
+          maxAttempts: MAX_RETRIES + 1,
+        })
         const stream = await this.getOpenAIClient().chat.completions.create({
           model: currentConfig.model,
           messages,
