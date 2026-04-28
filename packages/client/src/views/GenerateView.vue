@@ -1000,9 +1000,43 @@ async function handleRollback(index: number) {
   ElMessage.success(`已回退到 V${index + 1}`)
 }
 
-function copyContent() {
-  navigator.clipboard.writeText(stripMarkdown(summaryStore.content))
-  ElMessage.success('已复制到剪贴板')
+async function copyContent() {
+  const raw = summaryStore.content
+  const html = compactHtmlForClipboard(md.render(raw))
+  const plain = stripMarkdown(raw)
+  try {
+    // 同时写入 text/html + text/plain，粘贴到 Word / 微信 / 邮件等富文本编辑器会保留标题和加粗
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ])
+    } else {
+      await navigator.clipboard.writeText(plain)
+    }
+    ElMessage.success('已复制到剪贴板')
+  } catch (err) {
+    try {
+      await navigator.clipboard.writeText(plain)
+      ElMessage.success('已复制到剪贴板（纯文本）')
+    } catch {
+      ElMessage.error('复制失败，请检查浏览器权限')
+    }
+  }
+}
+
+/**
+ * markdown-it 默认输出的 p / li / h* 在富文本编辑器（飞书 / Word / 微信）里
+ * 都会带默认 margin，loose list 还会把 li 套上 <p> 进一步放大段距。
+ * 这里：(1) 去掉 li 内的 p 包裹，(2) 给常见块元素加 inline margin:0。
+ */
+function compactHtmlForClipboard(html: string): string {
+  return html
+    .replace(/<li>\s*<p>/g, '<li>')
+    .replace(/<\/p>\s*<\/li>/g, '</li>')
+    .replace(/<(p|h[1-6]|ul|ol|li|blockquote)>/g, '<$1 style="margin:0;padding:0">')
 }
 
 // ===== 章节级修改 =====
