@@ -53,8 +53,8 @@ const SYSTEM_PROMPT = `你是工作总结助手。用户会给你一段从工作
 /** 单次 LLM 调用的输入字符上限：超过则切片 */
 const CHUNK_CHAR_LIMIT = 80 * 1024
 
-/** chunk 间并发上限：太大容易撞代理的 rate limit */
-const CHUNK_CONCURRENCY = 4
+/** chunk 间并发上限：gpt-5.5 代理对并发较敏感，优先保证大 Excel 稳定抽取 */
+const CHUNK_CONCURRENCY = 1
 
 export interface ExtractProgress {
   /** 在切片数组里的序号 */

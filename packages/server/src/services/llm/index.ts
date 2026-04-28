@@ -380,8 +380,27 @@ export class LLMService {
       return this.getAnthropicClient().chat(messages)
     }
     if (this.isResponsesMode()) {
-      const result = await this.getResponsesClient().chat(messages)
-      return result.text
+      let lastError: unknown
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const result = await this.getResponsesClient().chat(messages)
+          return result.text
+        } catch (err) {
+          lastError = err
+          const msg = (err as Error).message?.toLowerCase() ?? ''
+          const retriable = err instanceof ResponsesAPIError
+            && (err.status === 429 || (err.status >= 500 && err.status < 600))
+          const networkErr = msg.includes('fetch failed') || msg.includes('econnreset') || msg.includes('etimedout')
+          if (attempt < MAX_RETRIES && (retriable || networkErr)) {
+            const delay = BASE_DELAY_MS * Math.pow(2, attempt)
+            console.warn(`[LLM] Responses chat 第 ${attempt + 1} 次失败，${delay / 1000}s 后重试:`, (err as Error).message)
+            await sleep(delay)
+            continue
+          }
+          throw err
+        }
+      }
+      throw lastError
     }
 
     let lastError: unknown
